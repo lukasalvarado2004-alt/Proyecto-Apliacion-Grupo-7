@@ -1,0 +1,175 @@
+package com.example.proyecto_apliacion.funcionalidades.inventario
+
+import android.graphics.Bitmap
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.CameraAlt
+import androidx.compose.material.icons.filled.Collections
+import androidx.compose.material.icons.filled.Image
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.unit.dp
+import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.lifecycle.viewmodel.initializer
+import androidx.lifecycle.viewmodel.viewModelFactory
+import coil.compose.AsyncImage
+import com.example.proyecto_apliacion.R
+import com.example.proyecto_apliacion.data.KaijuDatabase
+import com.example.proyecto_apliacion.data.ProductoRepository
+import java.io.File
+import java.io.FileOutputStream
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun InventarioScreen(onVolverClick: () -> Unit, modifier: Modifier = Modifier) {
+    val context = LocalContext.current
+    val db = remember { KaijuDatabase.obtener(context) }
+    val vm: InventarioViewModel = viewModel(factory = viewModelFactory {
+        initializer { InventarioViewModel(ProductoRepository(db.productoDao(), db.movimientoDao())) }
+    })
+    val state by vm.uiState.collectAsState()
+    var id by remember { mutableStateOf("") }
+    var nombre by remember { mutableStateOf("") }
+    var categoria by remember { mutableStateOf("Ropa") }
+    var stock by remember { mutableStateOf("") }
+    var precio by remember { mutableStateOf("") }
+    var mostrarFormulario by remember { mutableStateOf(false) }
+    var imagenSeleccionada by remember { mutableStateOf<Uri?>(null) }
+    var bitmapCamara by remember { mutableStateOf<Bitmap?>(null) }
+    var errorImagen by remember { mutableStateOf<String?>(null) }
+
+    fun guardarBitmap(bitmap: Bitmap): Uri? = runCatching {
+        val dir = File(context.filesDir, "fotos_productos").apply { mkdirs() }
+        val archivo = File(dir, "producto_${System.currentTimeMillis()}.jpg")
+        FileOutputStream(archivo).use { bitmap.compress(Bitmap.CompressFormat.JPEG, 90, it) }
+        Uri.fromFile(archivo)
+    }.getOrNull()
+
+    fun copiarImagenGaleria(uri: Uri): Uri? = runCatching {
+        val dir = File(context.filesDir, "fotos_productos").apply { mkdirs() }
+        val archivo = File(dir, "producto_${System.currentTimeMillis()}.jpg")
+        context.contentResolver.openInputStream(uri).use { input ->
+            requireNotNull(input) { "No se pudo abrir la imagen" }
+            FileOutputStream(archivo).use { output -> input.copyTo(output) }
+        }
+        Uri.fromFile(archivo)
+    }.getOrNull()
+
+    val launcherCamara = rememberLauncherForActivityResult(ActivityResultContracts.TakePicturePreview()) { bitmap ->
+        if (bitmap != null) {
+            val uri = guardarBitmap(bitmap)
+            if (uri != null) { imagenSeleccionada = uri; bitmapCamara = bitmap; errorImagen = null }
+            else errorImagen = "No se pudo guardar la foto. Intenta nuevamente."
+        }
+    }
+    val launcherGaleria = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        if (uri != null) {
+            val copia = copiarImagenGaleria(uri)
+            if (copia != null) { imagenSeleccionada = copia; bitmapCamara = null; errorImagen = null }
+            else errorImagen = "No se pudo importar la imagen seleccionada."
+        }
+    }
+
+    Scaffold(topBar = {
+        TopAppBar(title = { Text("Inventario Kaiju") }, navigationIcon = { IconButton(onClick = onVolverClick) { Icon(Icons.Default.ArrowBack, "Volver") } })
+    }, floatingActionButton = {
+        FloatingActionButton(onClick = { mostrarFormulario = !mostrarFormulario; if (mostrarFormulario.not()) { id=""; nombre=""; stock=""; precio=""; imagenSeleccionada=null; bitmapCamara=null; vm.limpiarMensaje() } }) { Text(if (mostrarFormulario) "×" else "+") }
+    }) { padding ->
+        Column(Modifier.padding(padding).fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            OutlinedTextField(value = state.busqueda, onValueChange = vm::cambiarBusqueda, label = { Text("Buscar producto o código") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                listOf("Todos", "Ropa", "Mochilas", "Accesorios").forEach { cat -> FilterChip(selected = state.categoria == cat, onClick = { vm.cambiarCategoria(cat) }, label = { Text(cat) }) }
+            }
+            AnimatedVisibility(visible = mostrarFormulario) {
+                Card(Modifier.fillMaxWidth().heightIn(max = 420.dp)) {
+                    Column(
+                        Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text("Nuevo producto", style = MaterialTheme.typography.titleMedium)
+                        OutlinedTextField(value = id, onValueChange = { id=it; vm.limpiarMensaje() }, label = { Text("Código (ej. K007)") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+                        OutlinedTextField(value = nombre, onValueChange = { nombre=it; vm.limpiarMensaje() }, label = { Text("Nombre") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+                        Text("Categoría")
+                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) { listOf("Ropa", "Mochilas", "Accesorios").forEach { cat -> FilterChip(selected = categoria == cat, onClick = { categoria=cat }, label = { Text(cat) }) } }
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            OutlinedTextField(value = stock, onValueChange = { stock=it.filter(Char::isDigit); vm.limpiarMensaje() }, label = { Text("Stock") }, modifier = Modifier.weight(1f), singleLine = true)
+                            OutlinedTextField(value = precio, onValueChange = { precio=it.filter(Char::isDigit); vm.limpiarMensaje() }, label = { Text("Precio CLP") }, modifier = Modifier.weight(1f), singleLine = true)
+                        }
+                        Text("Fotografía del producto (opcional)", style = MaterialTheme.typography.labelLarge)
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            OutlinedButton(onClick = { launcherCamara.launch(null) }, modifier = Modifier.weight(1f)) { Icon(Icons.Default.CameraAlt, null); Spacer(Modifier.width(5.dp)); Text("Tomar foto") }
+                            OutlinedButton(onClick = { launcherGaleria.launch("image/*") }, modifier = Modifier.weight(1f)) { Icon(Icons.Default.Collections, null); Spacer(Modifier.width(5.dp)); Text("Galería") }
+                        }
+                        AnimatedVisibility(imagenSeleccionada != null) {
+                            AsyncImage(model = imagenSeleccionada, contentDescription = "Foto del producto", modifier = Modifier.fillMaxWidth().height(150.dp), contentScale = ContentScale.Crop)
+                        }
+                        if (imagenSeleccionada != null) TextButton(onClick = { imagenSeleccionada=null; bitmapCamara=null }) { Text("Quitar fotografía") }
+                        errorImagen?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+                        state.errorFormulario?.let { Text("⚠ $it", color = MaterialTheme.colorScheme.error) }
+                        state.mensaje?.let { Text("✓ $it", color = MaterialTheme.colorScheme.primary) }
+                        Button(onClick = {
+                            vm.guardar(id, nombre, categoria, stock, precio, imagenSeleccionada?.toString())
+                        }, modifier = Modifier.fillMaxWidth()) { Text("Guardar producto") }
+                    }
+                }
+            }
+            Text("Productos: ${state.filtrados.size}", style = MaterialTheme.typography.titleMedium)
+            LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                items(state.filtrados, key = { it.id }) { producto ->
+                    Card(Modifier.fillMaxWidth()) {
+                        Row(Modifier.fillMaxWidth().padding(12.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                            if (!producto.imagenUri.isNullOrBlank()) {
+                                AsyncImage(model = producto.imagenUri, contentDescription = "Foto de ${producto.nombre}", modifier = Modifier.size(82.dp), contentScale = ContentScale.Crop)
+                            } else {
+                                // Las imágenes predeterminadas se muestran también en productos ya guardados
+                                // en instalaciones anteriores, aunque su imagenUri siga siendo null.
+                                val imagenPredeterminada = when (producto.id.uppercase()) {
+                                    "K001" -> R.drawable.producto_k001
+                                    "K002" -> R.drawable.producto_k002
+                                    "K003" -> R.drawable.producto_k003
+                                    "K004" -> R.drawable.producto_k004
+                                    "K005" -> R.drawable.producto_k005
+                                    "K006" -> R.drawable.producto_k006
+                                    else -> null
+                                }
+                                if (imagenPredeterminada != null) {
+                                    Image(
+                                        painter = painterResource(imagenPredeterminada),
+                                        contentDescription = "Imagen de ${producto.nombre}",
+                                        modifier = Modifier.size(82.dp),
+                                        contentScale = ContentScale.Crop
+                                    )
+                                } else {
+                                    Surface(Modifier.size(82.dp), color = MaterialTheme.colorScheme.surfaceVariant) {
+                                        Icon(Icons.Default.Image, contentDescription = "Sin foto", modifier = Modifier.padding(24.dp))
+                                    }
+                                }
+                            }
+                            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                                Text(producto.nombre, style = MaterialTheme.typography.titleMedium)
+                                Text("${producto.id} · ${producto.categoria}", style = MaterialTheme.typography.bodySmall)
+                                Text("Stock: ${producto.stock} · $${producto.precio}")
+                                TextButton(onClick = { vm.eliminar(producto.id) }, contentPadding = PaddingValues(0.dp)) { Text("Eliminar") }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
