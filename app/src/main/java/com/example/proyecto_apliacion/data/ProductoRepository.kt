@@ -19,7 +19,29 @@ class ProductoRepository(private val dao: ProductoDao, private val movimientosDa
                 detalle = "Actualización de stock"))
         }
     }
+    suspend fun actualizarProducto(producto: Producto) {
+        val anterior = dao.buscarPorId(producto.id)
+        dao.updateProducto(producto)
 
+        if (anterior != null) {
+            val difStock = producto.stock - anterior.stock
+            val detalleTexto = if (difStock != 0) {
+                "Cambio de stock (${anterior.stock} → ${producto.stock})"
+            } else {
+                "Datos del producto modificados"
+            }
+
+            movimientosDao.insertar(
+                Movimiento(
+                    productoId = producto.id,
+                    nombreProducto = producto.nombre,
+                    tipo = "MODIFICACIÓN",
+                    cantidad = if (difStock != 0) kotlin.math.abs(difStock) else producto.stock,
+                    detalle = detalleTexto
+                )
+            )
+        }
+    }
     suspend fun eliminar(id: String) {
         val producto = dao.buscarPorId(id)
         if (producto != null) {
@@ -28,6 +50,8 @@ class ProductoRepository(private val dao: ProductoDao, private val movimientosDa
             dao.eliminar(id)
         }
     }
+
+
 
     suspend fun inicializarSiVacio() {
         if (dao.contar() == 0) listOf(

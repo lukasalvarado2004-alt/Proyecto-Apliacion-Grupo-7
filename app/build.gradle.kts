@@ -6,12 +6,12 @@ plugins {
 
 android {
     namespace = "com.example.proyecto_apliacion"
-    compileSdk = 35 // 🟢 Ajustado a Android 15 (Estándar totalmente compatible)
+    compileSdk = 37 // 🟢 Ajustado a Android 15 (Estándar totalmente compatible)
 
     defaultConfig {
         applicationId = "com.example.proyecto_apliacion"
-        minSdk = 26
-        targetSdk = 35
+        minSdk = 24
+        targetSdk = 37
         versionCode = 1
         versionName = "1.0"
 

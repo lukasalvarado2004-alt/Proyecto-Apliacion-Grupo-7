@@ -3,6 +3,7 @@ package com.example.proyecto_apliacion.data
 import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.Query
+import androidx.room.Update
 import kotlinx.coroutines.flow.Flow
 
 @Dao
@@ -12,4 +13,5 @@ interface MovimientoDao {
 
     @Insert
     suspend fun insertar(movimiento: Movimiento)
+
 }
