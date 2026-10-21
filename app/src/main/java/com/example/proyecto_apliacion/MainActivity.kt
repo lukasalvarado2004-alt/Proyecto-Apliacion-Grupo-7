@@ -13,12 +13,14 @@ import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Inventory
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable // <--- Permite conservar la pantalla al girar el dispositivo
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.example.proyecto_apliacion.data.KaijuDatabase
 import com.example.proyecto_apliacion.data.ProductoRepository
 import com.example.proyecto_apliacion.funcionalidades.autenticacion.LoginScreen
+import com.example.proyecto_apliacion.funcionalidades.cliente.CatalogoClienteScreen
 import com.example.proyecto_apliacion.funcionalidades.inventario.InventarioScreen
 import com.example.proyecto_apliacion.funcionalidades.movimientos.MovimientosScreen
 import com.example.proyecto_apliacion.funcionalidades.perfil.PerfilScreen
@@ -34,11 +36,18 @@ class MainActivity : ComponentActivity() {
 
 @Composable
 private fun KaijuApp() {
-    var autenticado by remember { mutableStateOf(false) }
-    var pantalla by remember { mutableStateOf("panel") }
-    val context = LocalContext.current
-    if (!autenticado) {
-        LoginScreen(onLoginCorrecto = { autenticado = true })
+    // Usamos rememberSaveable para recordar el estado de navegación tras girar el teléfono
+    var autenticado by rememberSaveable { mutableStateOf(false) }
+    var esCliente by rememberSaveable { mutableStateOf(false) }
+    var pantalla by rememberSaveable { mutableStateOf("panel") }
+
+    if (esCliente) {
+        CatalogoClienteScreen(onVolverClick = { esCliente = false })
+    } else if (!autenticado) {
+        LoginScreen(
+            onLoginCorrecto = { autenticado = true },
+            onLoginCliente = { esCliente = true }
+        )
     } else {
         Scaffold(bottomBar = {
             NavigationBar {
@@ -75,13 +84,15 @@ private fun PanelInicio(onInventario: () -> Unit, onMovimientos: () -> Unit, onC
                 Text("Resumen de tu inventario", style = MaterialTheme.typography.bodyMedium)
             }
             item {
-                Card(Modifier.fillMaxWidth()) { Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("Stock registrado", style = MaterialTheme.typography.titleMedium)
-                    Text("${productos.sumOf { it.stock }} unidades", style = MaterialTheme.typography.headlineLarge, color = MaterialTheme.colorScheme.primary)
-                    Text("${productos.size} productos registrados")
-                    Button(onClick = onInventario, modifier = Modifier.fillMaxWidth()) { Text("Administrar inventario") }
-                    OutlinedButton(onClick = onMovimientos, modifier = Modifier.fillMaxWidth()) { Text("Ver movimientos") }
-                } }
+                Card(Modifier.fillMaxWidth()) {
+                    Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text("Stock registrado", style = MaterialTheme.typography.titleMedium)
+                        Text("${productos.sumOf { it.stock }} unidades", style = MaterialTheme.typography.headlineLarge, color = MaterialTheme.colorScheme.primary)
+                        Text("${productos.size} productos registrados")
+                        Button(onClick = onInventario, modifier = Modifier.fillMaxWidth()) { Text("Administrar inventario") }
+                        OutlinedButton(onClick = onMovimientos, modifier = Modifier.fillMaxWidth()) { Text("Ver movimientos") }
+                    }
+                }
             }
             item { OutlinedButton(onClick = onCerrarSesion, modifier = Modifier.fillMaxWidth()) { Text("Cerrar sesión") } }
         }
