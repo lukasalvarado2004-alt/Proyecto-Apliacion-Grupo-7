@@ -23,6 +23,11 @@ Aplicación Android en Kotlin y Jetpack Compose para consultar y mantener un inv
 
 Estas credenciales son exclusivamente para una demostración académica; no representan autenticación segura para producción.
 
+
+## Base de datos SQLite
+
+La aplicación utiliza SQLite local a través de Android Room. Los productos y el historial de movimientos persisten entre ejecuciones. La base se llama `kaiju_inventory.db`, contiene las tablas `productos` y `movimientos`, y dispone de migración del esquema de versión 1 a 2. Consulta `docs/BASE_DE_DATOS_SQLITE.md` para el esquema y los pasos para inspeccionarla desde Android Studio.
+
 ## Arquitectura
 - `data/`: entidad Room, DAO, base de datos y repositorio.
 - `funcionalidades/autenticacion/`: pantalla y lógica de acceso.
@@ -48,3 +53,20 @@ La rúbrica también exige evidencia externa real de commits distribuidos y plan
 6. En **Perfil**, edita el nombre y correo; los cambios quedan guardados localmente.
 
 Las funciones de cámara dependen de que el emulador o dispositivo tenga una aplicación de cámara disponible. La selección de galería usa el selector del sistema Android y no requiere solicitar acceso amplio al almacenamiento.
+
+## Módulos comerciales añadidos
+
+- **Ventas:** registro de ventas por producto y cantidad, validación de stock disponible, detalle de venta, total en CLP, descuento de existencias y movimiento tipo `VENTA`. La escritura de venta, detalle, stock y movimiento se realiza dentro de una transacción Room.
+- **Usuarios y roles:** pantalla de administración para registrar, activar/desactivar y eliminar usuarios, con roles `ADMIN`, `VENTAS` e `INVENTARIO`.
+- **Categorías:** administración de categorías (crear/actualizar por nombre, activar/desactivar y eliminar).
+- **Catálogo público:** consulta de productos, categoría, precio y disponibilidad.
+- **Indicadores:** stock total, cantidad de productos con stock bajo (umbral de 10 unidades), ventas del día e historial de ventas.
+- **Control de acceso por rol en navegación:** administrador accede a todo; ventas a catálogo y ventas; inventario a catálogo, inventario y movimientos.
+
+### Accesos demo
+
+- `admin / 1234` — administrador
+- `ventas / 5678` — personal de ventas
+- `inventario / 0000` — encargado de inventario
+
+Nota: el alta de usuarios en esta versión administra el registro y el rol en SQLite; la autenticación de cuentas creadas desde esa pantalla y el almacenamiento seguro de contraseñas quedan como mejora pendiente. Las cuentas demo siguen usando credenciales locales de demostración.

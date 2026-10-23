@@ -1,0 +1,102 @@
+package com.example.proyecto_apliacion.funcionalidades.comercial
+
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.dp
+import androidx.room.withTransaction
+import com.example.proyecto_apliacion.data.*
+import kotlinx.coroutines.launch
+import java.text.NumberFormat
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+
+private fun clp(n: Long) = NumberFormat.getCurrencyInstance(Locale("es", "CL")).format(n)
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun VentasScreen(usuarioActual: String) {
+ val ctx= LocalContext.current; val db= remember { KaijuDatabase.obtener(ctx) }; val scope= rememberCoroutineScope()
+ val productos by db.productoDao().observarTodos().collectAsState(initial= emptyList())
+ val ventas by db.ventaDao().observar().collectAsState(initial= emptyList())
+ var seleccionado by remember { mutableStateOf("") }; var cantidad by remember { mutableStateOf("1") }; var aviso by remember { mutableStateOf("") }
+ val hoy = remember { java.util.Calendar.getInstance().apply { set(java.util.Calendar.HOUR_OF_DAY,0);set(java.util.Calendar.MINUTE,0);set(java.util.Calendar.SECOND,0);set(java.util.Calendar.MILLISECOND,0) }.timeInMillis }
+ val ventasHoy by db.ventaDao().ventasDesde(hoy).collectAsState(initial=0L)
+ Scaffold(topBar={ TopAppBar(title={Text("Ventas y resumen comercial")}) }) { pad ->
+ LazyColumn(Modifier.fillMaxSize().padding(pad).padding(16.dp), verticalArrangement=Arrangement.spacedBy(12.dp)) {
+ item { Card(Modifier.fillMaxWidth()) { Column(Modifier.padding(16.dp)) { Text("Ventas de hoy",style=MaterialTheme.typography.titleMedium); Text(clp(ventasHoy),style=MaterialTheme.typography.headlineMedium,color=MaterialTheme.colorScheme.primary); Text("Transacciones registradas: ${ventas.count { it.fechaMillis >= hoy }}") } } }
+ item { Text("Registrar venta",style=MaterialTheme.typography.titleLarge) }
+ item { var expanded by remember { mutableStateOf(false) }; ExposedDropdownMenuBox(expanded=expanded,onExpandedChange={expanded=it}) { OutlinedTextField(value=productos.firstOrNull{it.id==seleccionado}?.let{"${it.nombre} · stock ${it.stock} · ${clp(it.precio.toLong())}"}?:"Selecciona un producto",onValueChange={},readOnly=true,label={Text("Producto disponible")},modifier=Modifier.menuAnchor().fillMaxWidth()); ExposedDropdownMenu(expanded=expanded,onDismissRequest={expanded=false}) { productos.filter{it.stock>0}.forEach { prod -> DropdownMenuItem(text={Text("${prod.nombre} · stock ${prod.stock}")},onClick={seleccionado=prod.id;expanded=false}) } } } }
+ item { OutlinedTextField(value=cantidad,onValueChange={cantidad=it.filter(Char::isDigit)},label={Text("Cantidad")},modifier=Modifier.fillMaxWidth()) }
+ item { val prod=productos.firstOrNull{it.id==seleccionado}; Text("Total: ${prod?.let { clp(it.precio.toLong() * (cantidad.toIntOrNull()?:0)) } ?: clp(0)}") }
+ item { Button(modifier=Modifier.fillMaxWidth(),onClick={ scope.launch { val prod=productos.firstOrNull{it.id==seleccionado}; val qty=cantidad.toIntOrNull()?:0
+ if(prod==null || qty<=0) aviso="Selecciona producto y cantidad válida" else if(qty>prod.stock) aviso="Stock insuficiente: disponible ${prod.stock}" else { db.withTransaction { val ventaId=db.ventaDao().insertar(Venta(usuario=usuarioActual,total=prod.precio.toLong()*qty)); db.ventaDao().insertarDetalles(listOf(DetalleVenta(ventaId=ventaId,productoId=prod.id,nombreProducto=prod.nombre,cantidad=qty,precioUnitario=prod.precio,subtotal=prod.precio.toLong()*qty))); db.productoDao().guardar(prod.copy(stock=prod.stock-qty)); db.movimientoDao().insertar(Movimiento(productoId=prod.id,nombreProducto=prod.nombre,tipo="VENTA",cantidad=qty,detalle="Venta #$ventaId por ${clp(prod.precio.toLong()*qty)} · usuario $usuarioActual")) }; aviso="Venta registrada correctamente"; seleccionado=""; cantidad="1" }
+ } }) { Text("Confirmar venta y descontar stock") } }
+ if(aviso.isNotBlank()) item { Text(aviso,color=MaterialTheme.colorScheme.primary) }
+ item { HorizontalDivider(); Text("Historial de ventas",style=MaterialTheme.typography.titleLarge) }
+ items(ventas.take(100),key={it.id}) { v -> Card(Modifier.fillMaxWidth()) { Column(Modifier.padding(12.dp)) { Text("Venta #${v.id} · ${clp(v.total)}",style=MaterialTheme.typography.titleMedium); Text("${SimpleDateFormat("dd/MM/yyyy HH:mm",Locale.getDefault()).format(Date(v.fechaMillis))} · ${v.usuario}"); Text(v.estado) } } }
+ }
+ }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun AdministracionScreen() {
+ val ctx=LocalContext.current; val db= remember { KaijuDatabase.obtener(ctx) }; val scope= rememberCoroutineScope()
+ val usuarios by db.usuarioDao().observar().collectAsState(initial=emptyList()); val categorias by db.categoriaDao().observar().collectAsState(initial=emptyList())
+ var tab by remember { mutableIntStateOf(0) }; var nombre by remember { mutableStateOf("") }; var descripcion by remember { mutableStateOf("") }; var username by remember { mutableStateOf("") }; var nombreUsuario by remember { mutableStateOf("") }; var correo by remember { mutableStateOf("") }; var rol by remember { mutableStateOf("VENTAS") }; var aviso by remember { mutableStateOf("") }
+ LaunchedEffect(Unit) { if(db.usuarioDao().contar()==0) listOf(Usuario("admin","Administrador","ADMIN",correo="admin@kaiju.cl"),Usuario("ventas","Personal de ventas","VENTAS",correo="ventas@kaiju.cl"),Usuario("inventario","Encargado de inventario","INVENTARIO",correo="inventario@kaiju.cl")).forEach{db.usuarioDao().guardar(it)}; if(db.categoriaDao().contar()==0) listOf(Categoria("Ropa","Prendas y vestuario"),Categoria("Mochilas","Bolsos y mochilas"),Categoria("Accesorios","Accesorios Kaiju")).forEach{db.categoriaDao().guardar(it)} }
+ Scaffold(topBar={TopAppBar(title={Text("Administración")})}) { pad -> Column(Modifier.fillMaxSize().padding(pad).padding(16.dp)) {
+ TabRow(selectedTabIndex=tab) { Tab(tab==0,{tab=0},text={Text("Usuarios")}); Tab(tab==1,{tab=1},text={Text("Categorías")}) }
+ if(tab==0) LazyColumn(Modifier.fillMaxSize(),verticalArrangement=Arrangement.spacedBy(8.dp)) {
+ item {
+     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+         OutlinedTextField(username,{username=it},label={Text("Usuario / login")},modifier=Modifier.fillMaxWidth())
+         OutlinedTextField(nombreUsuario,{nombreUsuario=it},label={Text("Nombre visible")},modifier=Modifier.fillMaxWidth())
+         OutlinedTextField(correo,{correo=it},label={Text("Correo")},modifier=Modifier.fillMaxWidth())
+         var ex by remember { mutableStateOf(false) }
+         ExposedDropdownMenuBox(expanded = ex, onExpandedChange = { ex = it }) {
+             OutlinedTextField(value=rol,onValueChange={},label={Text("Rol")},readOnly=true,modifier=Modifier.menuAnchor().fillMaxWidth())
+             ExposedDropdownMenu(expanded = ex, onDismissRequest = { ex = false }) {
+                 listOf("ADMIN","VENTAS","INVENTARIO").forEach {
+                     DropdownMenuItem(text={Text(it)},onClick={rol=it;ex=false})
+                 }
+             }
+         }
+         Button(onClick={scope.launch { if(username.isBlank()||nombreUsuario.isBlank()) aviso="Completa usuario y nombre" else { db.usuarioDao().guardar(Usuario(username.trim(),nombreUsuario.trim(),rol,true,correo.trim())); aviso="Usuario guardado"; username="";nombreUsuario="";correo="" } }},modifier=Modifier.fillMaxWidth()) {
+             Text("Guardar usuario")
+         }
+         Text("Los usuarios demo usan las claves: admin/1234, ventas/5678, inventario/0000. Los nuevos registros se administran aquí; para iniciar sesión con credenciales nuevas se debe asignar contraseña en la próxima versión.",style=MaterialTheme.typography.bodySmall)
+     }
+ }
+ items(usuarios,key={it.username}) { u -> Card(Modifier.fillMaxWidth()) { Row(Modifier.fillMaxWidth().padding(12.dp),horizontalArrangement=Arrangement.SpaceBetween) { Column(Modifier.weight(1f)) { Text(u.nombre,style=MaterialTheme.typography.titleMedium); Text("${u.username} · ${u.rol}"); Text(if(u.activo) "Activo" else "Deshabilitado") }; Column { TextButton(onClick={scope.launch{db.usuarioDao().cambiarEstado(u.username,!u.activo)}}){Text(if(u.activo)"Desactivar" else "Activar")}; if(u.username!="admin") TextButton(onClick={scope.launch{db.usuarioDao().eliminar(u.username)}}){Text("Eliminar")} } } } }
+ } else LazyColumn(Modifier.fillMaxSize(),verticalArrangement=Arrangement.spacedBy(8.dp)) {
+ item {
+     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+         OutlinedTextField(nombre,{nombre=it},label={Text("Nombre de categoría")},modifier=Modifier.fillMaxWidth())
+         OutlinedTextField(descripcion,{descripcion=it},label={Text("Descripción")},modifier=Modifier.fillMaxWidth())
+         Button(onClick={scope.launch { if(nombre.trim().length<2) aviso="El nombre debe tener al menos 2 caracteres" else { db.categoriaDao().guardar(Categoria(nombre.trim(),descripcion.trim())); aviso="Categoría guardada";nombre="";descripcion="" } }},modifier=Modifier.fillMaxWidth()){
+             Text("Guardar categoría")
+         }
+     }
+ }
+ items(categorias,key={it.nombre}) { c -> Card(Modifier.fillMaxWidth()) { Row(Modifier.fillMaxWidth().padding(12.dp),horizontalArrangement=Arrangement.SpaceBetween) { Column(Modifier.weight(1f)){Text(c.nombre,style=MaterialTheme.typography.titleMedium);Text(c.descripcion);Text(if(c.activa)"Activa" else "Inactiva")}; Column {TextButton(onClick={scope.launch{db.categoriaDao().cambiarEstado(c.nombre,!c.activa)}}){Text(if(c.activa)"Desactivar" else "Activar")}; TextButton(onClick={scope.launch{db.categoriaDao().eliminar(c.nombre)}}){Text("Eliminar")} } } } }
+ }
+ if(aviso.isNotBlank()) Text(aviso,color=MaterialTheme.colorScheme.primary)
+ } }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun CatalogoPublicoScreen() {
+ val ctx=LocalContext.current; val db= remember { KaijuDatabase.obtener(ctx) }; val productos by db.productoDao().observarTodos().collectAsState(initial=emptyList()); var busqueda by remember { mutableStateOf("") }
+ Scaffold(topBar={TopAppBar(title={Text("Catálogo y disponibilidad")})}) { pad -> LazyColumn(Modifier.fillMaxSize().padding(pad).padding(16.dp),verticalArrangement=Arrangement.spacedBy(8.dp)) {
+ item { OutlinedTextField(busqueda,{busqueda=it},label={Text("Buscar producto")},modifier=Modifier.fillMaxWidth()) }
+ items(productos.filter{it.nombre.contains(busqueda,true)||it.categoria.contains(busqueda,true)},key={it.id}) { p -> Card(Modifier.fillMaxWidth()) { Column(Modifier.padding(14.dp)) { Text(p.nombre,style=MaterialTheme.typography.titleMedium); Text("Categoría: ${p.categoria}"); Text("Código: ${p.id}"); Text("Precio: ${clp(p.precio.toLong())}"); Text(if(p.stock>0) "Disponible" else "Agotado",color=if(p.stock>0)MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error) } } }
+ } }
+}

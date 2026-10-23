@@ -11,19 +11,14 @@ import com.example.proyecto_apliacion.data.Usuario
 import kotlinx.coroutines.launch
 
 class LoginViewModel : ViewModel() {
-
     var usuario by mutableStateOf("")
         private set
-
     var contrasena by mutableStateOf("")
         private set
-
     var mensajeError by mutableStateOf<String?>(null)
         private set
-
     var loginExitoso by mutableStateOf(false)
         private set
-
     var esIngresoCliente by mutableStateOf(false)
         private set
 
@@ -46,39 +41,53 @@ class LoginViewModel : ViewModel() {
     }
 
     fun iniciarSesion(context: Context) {
-        if (usuario.isBlank() || contrasena.isBlank()) {
+        val usuarioLimpio = usuario.trim().lowercase()
+        val claveLimpia = contrasena.trim()
+        if (usuarioLimpio.isBlank() || claveLimpia.isBlank()) {
             mensajeError = "Por favor, completa todos los campos."
+            loginExitoso = false
             return
         }
 
-        val cleanUser = usuario.trim().lowercase()
-        val cleanPass = contrasena.trim()
-
-        // 1. Validar operadores de administración
-        if ((cleanUser == "admin" && cleanPass == "1234") ||
-            (cleanUser == "ventas" && cleanPass == "5678") ||
-            (cleanUser == "inventario" && cleanPass == "0000")) {
-
-            esIngresoCliente = false
-            loginExitoso = true
-            mensajeError = null
-            return
+        // Accesos de operador requeridos para la evaluación.
+        val claveOperador = when (usuarioLimpio) {
+            "admin" -> "1234"
+            "ventas" -> "5678"
+            "inventario" -> "0000"
+            else -> null
         }
-
-        // 2. Validar cliente registrado en la tabla 'usuarios' de SQLite
-        val db = KaijuDatabase.obtener(context)
-        viewModelScope.launch {
-            val clienteEncontrado = db.usuarioDao().buscarPorCredenciales(cleanUser, cleanPass)
-            val esClienteDemo = cleanUser == "cliente" && cleanPass == "1234"
-
-            if (clienteEncontrado != null || esClienteDemo) {
-                esIngresoCliente = true
+        if (claveOperador != null) {
+            if (claveLimpia == claveOperador) {
+                esIngresoCliente = false
                 loginExitoso = true
                 mensajeError = null
             } else {
+                loginExitoso = false
                 mensajeError = "Usuario o contraseña incorrectos."
+            }
+            return
+        }
+
+        val db = KaijuDatabase.obtener(context)
+        viewModelScope.launch {
+            try {
+                val cliente = db.usuarioDao().buscarPorCredenciales(usuarioLimpio, claveLimpia)
+                val esClienteDemo = usuarioLimpio == "cliente" && claveLimpia == "1234"
+                if (cliente != null || esClienteDemo) {
+                    // Conserva el correo/usuario ingresado para mostrarlo en la sesión.
+                    usuario = cliente?.username ?: usuarioLimpio
+                    esIngresoCliente = true
+                    loginExitoso = true
+                    mensajeError = null
+                } else {
+                    loginExitoso = false
+                    esIngresoCliente = false
+                    mensajeError = "Usuario o contraseña incorrectos."
+                }
+            } catch (_: Exception) {
                 loginExitoso = false
                 esIngresoCliente = false
+                mensajeError = "No se pudo validar el acceso. Inténtalo nuevamente."
             }
         }
     }
@@ -91,22 +100,34 @@ class LoginViewModel : ViewModel() {
         onExito: () -> Unit,
         onError: (String) -> Unit
     ) {
+        val nombreLimpio = nombre.trim()
+        val correoLimpio = correo.trim().lowercase()
+        val claveLimpia = clave.trim()
+        if (nombreLimpio.isBlank() || correoLimpio.isBlank() || claveLimpia.isBlank()) {
+            onError("Completa todos los campos.")
+            return
+        }
         val db = KaijuDatabase.obtener(context)
         viewModelScope.launch {
-            val correoLimpio = correo.trim().lowercase()
-            val existente = db.usuarioDao().buscarPorCorreo(correoLimpio)
-
-            if (existente != null) {
-                onError("El correo ya está registrado.")
-            } else {
+            try {
+                val existente = db.usuarioDao().buscarPorCorreo(correoLimpio)
+                if (existente != null) {
+                    onError("El correo ya está registrado.")
+                    return@launch
+                }
+                val username = correoLimpio
                 val nuevoUsuario = Usuario(
-                    nombre = nombre.trim(),
+                    username = username,
+                    nombre = nombreLimpio,
+                    rol = "CLIENTE",
+                    activo = true,
                     correo = correoLimpio,
-                    clave = clave.trim(),
-                    rol = "CLIENTE"
+                    clave = claveLimpia
                 )
                 db.usuarioDao().registrar(nuevoUsuario)
                 onExito()
+            } catch (_: Exception) {
+                onError("No se pudo registrar la cuenta. Comprueba si el correo ya existe.")
             }
         }
     }
