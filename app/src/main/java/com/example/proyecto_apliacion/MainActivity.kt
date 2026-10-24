@@ -16,6 +16,7 @@ import com.example.proyecto_apliacion.data.KaijuDatabase
 import com.example.proyecto_apliacion.data.ProductoRepository
 import com.example.proyecto_apliacion.funcionalidades.autenticacion.LoginScreen
 import com.example.proyecto_apliacion.funcionalidades.inventario.InventarioScreen
+import com.example.proyecto_apliacion.funcionalidades.cliente.CatalogoClienteScreen
 import com.example.proyecto_apliacion.funcionalidades.movimientos.MovimientosScreen
 import com.example.proyecto_apliacion.funcionalidades.perfil.PerfilScreen
 import com.example.proyecto_apliacion.funcionalidades.comercial.*
@@ -123,7 +124,7 @@ private fun KaijuApp() {
             ) { contentPadding ->
                 Box(Modifier.fillMaxSize().padding(contentPadding)) {
                     when(pantalla) {
-                        "catalogo" -> CatalogoPublicoScreen()
+                        "catalogo" -> CatalogoClienteScreen(onVolverClick = { pantalla = "panel" })
                         "ventas" -> VentasScreen(usuario)
                         "inventario" -> InventarioScreen(onVolverClick={pantalla="panel"})
                         "movimientos" -> MovimientosScreen()

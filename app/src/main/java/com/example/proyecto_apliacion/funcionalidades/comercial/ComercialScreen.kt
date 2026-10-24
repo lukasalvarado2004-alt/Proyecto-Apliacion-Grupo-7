@@ -47,48 +47,138 @@ fun VentasScreen(usuarioActual: String) {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AdministracionScreen() {
- val ctx=LocalContext.current; val db= remember { KaijuDatabase.obtener(ctx) }; val scope= rememberCoroutineScope()
- val usuarios by db.usuarioDao().observar().collectAsState(initial=emptyList()); val categorias by db.categoriaDao().observar().collectAsState(initial=emptyList())
- var tab by remember { mutableIntStateOf(0) }; var nombre by remember { mutableStateOf("") }; var descripcion by remember { mutableStateOf("") }; var username by remember { mutableStateOf("") }; var nombreUsuario by remember { mutableStateOf("") }; var correo by remember { mutableStateOf("") }; var rol by remember { mutableStateOf("VENTAS") }; var aviso by remember { mutableStateOf("") }
- LaunchedEffect(Unit) { if(db.usuarioDao().contar()==0) listOf(Usuario("admin","Administrador","ADMIN",correo="admin@kaiju.cl"),Usuario("ventas","Personal de ventas","VENTAS",correo="ventas@kaiju.cl"),Usuario("inventario","Encargado de inventario","INVENTARIO",correo="inventario@kaiju.cl")).forEach{db.usuarioDao().guardar(it)}; if(db.categoriaDao().contar()==0) listOf(Categoria("Ropa","Prendas y vestuario"),Categoria("Mochilas","Bolsos y mochilas"),Categoria("Accesorios","Accesorios Kaiju")).forEach{db.categoriaDao().guardar(it)} }
- Scaffold(topBar={TopAppBar(title={Text("Administración")})}) { pad -> Column(Modifier.fillMaxSize().padding(pad).padding(16.dp)) {
- TabRow(selectedTabIndex=tab) { Tab(tab==0,{tab=0},text={Text("Usuarios")}); Tab(tab==1,{tab=1},text={Text("Categorías")}) }
- if(tab==0) LazyColumn(Modifier.fillMaxSize(),verticalArrangement=Arrangement.spacedBy(8.dp)) {
- item {
-     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-         OutlinedTextField(username,{username=it},label={Text("Usuario / login")},modifier=Modifier.fillMaxWidth())
-         OutlinedTextField(nombreUsuario,{nombreUsuario=it},label={Text("Nombre visible")},modifier=Modifier.fillMaxWidth())
-         OutlinedTextField(correo,{correo=it},label={Text("Correo")},modifier=Modifier.fillMaxWidth())
-         var ex by remember { mutableStateOf(false) }
-         ExposedDropdownMenuBox(expanded = ex, onExpandedChange = { ex = it }) {
-             OutlinedTextField(value=rol,onValueChange={},label={Text("Rol")},readOnly=true,modifier=Modifier.menuAnchor().fillMaxWidth())
-             ExposedDropdownMenu(expanded = ex, onDismissRequest = { ex = false }) {
-                 listOf("ADMIN","VENTAS","INVENTARIO").forEach {
-                     DropdownMenuItem(text={Text(it)},onClick={rol=it;ex=false})
-                 }
-             }
-         }
-         Button(onClick={scope.launch { if(username.isBlank()||nombreUsuario.isBlank()) aviso="Completa usuario y nombre" else { db.usuarioDao().guardar(Usuario(username.trim(),nombreUsuario.trim(),rol,true,correo.trim())); aviso="Usuario guardado"; username="";nombreUsuario="";correo="" } }},modifier=Modifier.fillMaxWidth()) {
-             Text("Guardar usuario")
-         }
-         Text("Los usuarios demo usan las claves: admin/1234, ventas/5678, inventario/0000. Los nuevos registros se administran aquí; para iniciar sesión con credenciales nuevas se debe asignar contraseña en la próxima versión.",style=MaterialTheme.typography.bodySmall)
-     }
- }
- items(usuarios,key={it.username}) { u -> Card(Modifier.fillMaxWidth()) { Row(Modifier.fillMaxWidth().padding(12.dp),horizontalArrangement=Arrangement.SpaceBetween) { Column(Modifier.weight(1f)) { Text(u.nombre,style=MaterialTheme.typography.titleMedium); Text("${u.username} · ${u.rol}"); Text(if(u.activo) "Activo" else "Deshabilitado") }; Column { TextButton(onClick={scope.launch{db.usuarioDao().cambiarEstado(u.username,!u.activo)}}){Text(if(u.activo)"Desactivar" else "Activar")}; if(u.username!="admin") TextButton(onClick={scope.launch{db.usuarioDao().eliminar(u.username)}}){Text("Eliminar")} } } } }
- } else LazyColumn(Modifier.fillMaxSize(),verticalArrangement=Arrangement.spacedBy(8.dp)) {
- item {
-     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-         OutlinedTextField(nombre,{nombre=it},label={Text("Nombre de categoría")},modifier=Modifier.fillMaxWidth())
-         OutlinedTextField(descripcion,{descripcion=it},label={Text("Descripción")},modifier=Modifier.fillMaxWidth())
-         Button(onClick={scope.launch { if(nombre.trim().length<2) aviso="El nombre debe tener al menos 2 caracteres" else { db.categoriaDao().guardar(Categoria(nombre.trim(),descripcion.trim())); aviso="Categoría guardada";nombre="";descripcion="" } }},modifier=Modifier.fillMaxWidth()){
-             Text("Guardar categoría")
-         }
-     }
- }
- items(categorias,key={it.nombre}) { c -> Card(Modifier.fillMaxWidth()) { Row(Modifier.fillMaxWidth().padding(12.dp),horizontalArrangement=Arrangement.SpaceBetween) { Column(Modifier.weight(1f)){Text(c.nombre,style=MaterialTheme.typography.titleMedium);Text(c.descripcion);Text(if(c.activa)"Activa" else "Inactiva")}; Column {TextButton(onClick={scope.launch{db.categoriaDao().cambiarEstado(c.nombre,!c.activa)}}){Text(if(c.activa)"Desactivar" else "Activar")}; TextButton(onClick={scope.launch{db.categoriaDao().eliminar(c.nombre)}}){Text("Eliminar")} } } } }
- }
- if(aviso.isNotBlank()) Text(aviso,color=MaterialTheme.colorScheme.primary)
- } }
+    val ctx = LocalContext.current
+    val db = remember { KaijuDatabase.obtener(ctx) }
+    val scope = rememberCoroutineScope()
+    val usuarios by db.usuarioDao().observar().collectAsState(initial = emptyList())
+    val categorias by db.categoriaDao().observar().collectAsState(initial = emptyList())
+    var tab by remember { mutableIntStateOf(0) }
+    var nombre by remember { mutableStateOf("") }
+    var descripcion by remember { mutableStateOf("") }
+    var username by remember { mutableStateOf("") }
+    var nombreUsuario by remember { mutableStateOf("") }
+    var correo by remember { mutableStateOf("") }
+    var rol by remember { mutableStateOf("VENTAS") }
+    var aviso by remember { mutableStateOf("") }
+
+    LaunchedEffect(Unit) {
+        if (db.usuarioDao().contar() == 0) {
+            listOf(
+                Usuario("admin", "Administrador", "ADMIN", correo = "admin@kaiju.cl"),
+                Usuario("ventas", "Personal de ventas", "VENTAS", correo = "ventas@kaiju.cl"),
+                Usuario("inventario", "Encargado de inventario", "INVENTARIO", correo = "inventario@kaiju.cl")
+            ).forEach { db.usuarioDao().guardar(it) }
+        }
+        if (db.categoriaDao().contar() == 0) {
+            listOf(
+                Categoria("Ropa", "Prendas y vestuario"),
+                Categoria("Mochilas", "Bolsos y mochilas"),
+                Categoria("Accesorios", "Accesorios Kaiju")
+            ).forEach { db.categoriaDao().guardar(it) }
+        }
+    }
+
+    Scaffold(topBar = { TopAppBar(title = { Text("Administración") }) }) { pad ->
+        Column(Modifier.fillMaxSize().padding(pad).padding(16.dp)) {
+            TabRow(selectedTabIndex = tab) {
+                Tab(tab == 0, { tab = 0 }, text = { Text("Usuarios") })
+                Tab(tab == 1, { tab = 1 }, text = { Text("Categorías") })
+            }
+            if (tab == 0) {
+                LazyColumn(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    item {
+                        OutlinedTextField(username, { username = it }, label = { Text("Usuario / login") }, modifier = Modifier.fillMaxWidth())
+                        OutlinedTextField(nombreUsuario, { nombreUsuario = it }, label = { Text("Nombre visible") }, modifier = Modifier.fillMaxWidth())
+                        OutlinedTextField(correo, { correo = it }, label = { Text("Correo") }, modifier = Modifier.fillMaxWidth())
+                        var ex by remember { mutableStateOf(false) }
+                        ExposedDropdownMenuBox(ex, { ex = it }) {
+                            OutlinedTextField(value = rol, onValueChange = {}, label = { Text("Rol") }, readOnly = true, modifier = Modifier.menuAnchor().fillMaxWidth())
+                            ExposedDropdownMenu(ex, { ex = false }) {
+                                listOf("ADMIN", "VENTAS", "INVENTARIO").forEach {
+                                    DropdownMenuItem(text = { Text(it) }, onClick = { rol = it; ex = false })
+                                }
+                            }
+                        }
+                        Button(
+                            onClick = {
+                                scope.launch {
+                                    if (username.isBlank() || nombreUsuario.isBlank()) {
+                                        aviso = "Completa usuario y nombre"
+                                    } else {
+                                        db.usuarioDao().guardar(Usuario(username.trim(), nombreUsuario.trim(), rol, true, correo.trim()))
+                                        aviso = "Usuario guardado"
+                                        username = ""
+                                        nombreUsuario = ""
+                                        correo = ""
+                                    }
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) { Text("Guardar usuario") }
+                        Text(
+                            "Los usuarios demo usan las claves: admin/1234, ventas/5678, inventario/0000. Los nuevos registros se administran aquí; para iniciar sesión con credenciales nuevas se debe asignar contraseña en la próxima versión.",
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+                    items(usuarios, key = { it.username }) { u ->
+                        Card(Modifier.fillMaxWidth()) {
+                            Row(Modifier.fillMaxWidth().padding(12.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+                                Column(Modifier.weight(1f)) {
+                                    Text(u.nombre, style = MaterialTheme.typography.titleMedium)
+                                    Text("${u.username} · ${u.rol}")
+                                    Text(if (u.activo) "Activo" else "Deshabilitado")
+                                }
+                                Column {
+                                    TextButton(onClick = { scope.launch { db.usuarioDao().cambiarEstado(u.username, !u.activo) } }) { Text(if (u.activo) "Desactivar" else "Activar") }
+                                    if (u.username != "admin") {
+                                        TextButton(onClick = { scope.launch { db.usuarioDao().eliminar(u.username) } }) { Text("Eliminar") }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            } else {
+                LazyColumn(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    item {
+                        OutlinedTextField(nombre, { nombre = it }, label = { Text("Nombre de categoría") }, modifier = Modifier.fillMaxWidth())
+                        OutlinedTextField(descripcion, { descripcion = it }, label = { Text("Descripción") }, modifier = Modifier.fillMaxWidth())
+                        Button(
+                            onClick = {
+                                scope.launch {
+                                    if (nombre.trim().length < 2) {
+                                        aviso = "El nombre debe tener al menos 2 caracteres"
+                                    } else {
+                                        db.categoriaDao().guardar(Categoria(nombre.trim(), descripcion.trim()))
+                                        aviso = "Categoría guardada"
+                                        nombre = ""
+                                        descripcion = ""
+                                    }
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) { Text("Guardar categoría") }
+                    }
+                    items(categorias, key = { it.nombre }) { c ->
+                        Card(Modifier.fillMaxWidth()) {
+                            Row(Modifier.fillMaxWidth().padding(12.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+                                Column(Modifier.weight(1f)) {
+                                    Text(c.nombre, style = MaterialTheme.typography.titleMedium)
+                                    Text(c.descripcion)
+                                    Text(if (c.activa) "Activa" else "Inactiva")
+                                }
+                                Column {
+                                    TextButton(onClick = { scope.launch { db.categoriaDao().cambiarEstado(c.nombre, !c.activa) } }) { Text(if (c.activa) "Desactivar" else "Activar") }
+                                    TextButton(onClick = { scope.launch { db.categoriaDao().eliminar(c.nombre) } }) { Text("Eliminar") }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            if (aviso.isNotBlank()) Text(aviso, color = MaterialTheme.colorScheme.primary)
+        }
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)

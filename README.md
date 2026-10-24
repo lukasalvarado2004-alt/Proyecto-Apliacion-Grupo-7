@@ -70,3 +70,8 @@ Las funciones de cámara dependen de que el emulador o dispositivo tenga una apl
 - `inventario / 0000` — encargado de inventario
 
 Nota: el alta de usuarios en esta versión administra el registro y el rol en SQLite; la autenticación de cuentas creadas desde esa pantalla y el almacenamiento seguro de contraseñas quedan como mejora pendiente. Las cuentas demo siguen usando credenciales locales de demostración.
+
+
+## Integración de acceso y navegación
+
+Esta versión combina el acceso y registro de clientes con el panel comercial, inventario, movimientos, perfil y menú lateral. Los operadores de demostración son `admin / 1234`, `ventas / 5678` e `inventario / 0000`. Los clientes se registran y validan contra Room/SQLite. El acceso como invitado abre el catálogo sin credenciales.

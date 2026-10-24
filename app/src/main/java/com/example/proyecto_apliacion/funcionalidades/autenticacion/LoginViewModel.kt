@@ -72,8 +72,7 @@ class LoginViewModel : ViewModel() {
         viewModelScope.launch {
             try {
                 val cliente = db.usuarioDao().buscarPorCredenciales(usuarioLimpio, claveLimpia)
-                val esClienteDemo = usuarioLimpio == "cliente" && claveLimpia == "1234"
-                if (cliente != null || esClienteDemo) {
+                if (cliente != null) {
                     // Conserva el correo/usuario ingresado para mostrarlo en la sesión.
                     usuario = cliente?.username ?: usuarioLimpio
                     esIngresoCliente = true
