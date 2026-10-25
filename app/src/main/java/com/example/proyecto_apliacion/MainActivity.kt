@@ -140,17 +140,47 @@ private fun KaijuApp() {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun PanelInicio(usuario:String, rol:String, onInventario:()->Unit, onMovimientos:()->Unit, onVentas:()->Unit, onCatalogo:()->Unit, onAdmin:()->Unit, onCerrarSesion:()->Unit) {
-    val context= LocalContext.current; val db= remember { KaijuDatabase.obtener(context) }; val repository= remember { ProductoRepository(db.productoDao(),db.movimientoDao()) }
-    val productos by repository.observarProductos().collectAsState(initial= emptyList()); LaunchedEffect(repository){repository.inicializarSiVacio()}
-    Scaffold(topBar={TopAppBar(title={Text("Kaiju Inventory · $rol")})}) { padding -> LazyColumn(Modifier.fillMaxSize().padding(padding).padding(20.dp),verticalArrangement=Arrangement.spacedBy(14.dp)) {
-        item { Text("¡Hola, $usuario!",style=MaterialTheme.typography.headlineMedium); Text("Resumen de inventario y operaciones") }
-        item { Card(Modifier.fillMaxWidth()) { Column(Modifier.padding(18.dp),verticalArrangement=Arrangement.spacedBy(8.dp)) { Text("Stock total",style=MaterialTheme.typography.titleMedium); Text("${productos.sumOf{it.stock}} unidades",style=MaterialTheme.typography.headlineLarge,color=MaterialTheme.colorScheme.primary); Text("${productos.size} productos registrados"); Text("Productos con stock bajo (≤ 10): ${productos.count{it.stock<=10}}",color=if(productos.any{it.stock<=10})MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary) } } }
-        item { Button(onClick=onCatalogo,modifier=Modifier.fillMaxWidth()){Text("Consultar catálogo y disponibilidad")} }
-        if(rol in listOf("ADMIN","INVENTARIO")) item { OutlinedButton(onClick=onInventario,modifier=Modifier.fillMaxWidth()){Text("Administrar inventario")} }
-        if(rol in listOf("ADMIN","VENTAS")) item { OutlinedButton(onClick=onVentas,modifier=Modifier.fillMaxWidth()){Text("Registrar venta") } }
-        if(rol in listOf("ADMIN","INVENTARIO")) item { OutlinedButton(onClick=onMovimientos,modifier=Modifier.fillMaxWidth()){Text("Ver movimientos") } }
-        if(rol=="ADMIN") item { OutlinedButton(onClick=onAdmin,modifier=Modifier.fillMaxWidth()){Text("Gestionar usuarios y categorías") } }
-        item { OutlinedButton(onClick=onCerrarSesion,modifier=Modifier.fillMaxWidth()){Text("Cerrar sesión") } }
-    } }
+private fun PanelInicio(
+    usuario: String,
+    rol: String,
+    onInventario: () -> Unit,
+    onMovimientos: () -> Unit,
+    onVentas: () -> Unit,
+    onCatalogo: () -> Unit,
+    onAdmin: () -> Unit,
+    onCerrarSesion: () -> Unit
+) {
+    val context = LocalContext.current
+    val db = remember { KaijuDatabase.obtener(context) }
+    val repository = remember { ProductoRepository(db.productoDao(), db.movimientoDao()) }
+    
+    val viewModel: com.example.proyecto_apliacion.funcionalidades.panel_inicio.PanelInicioViewModel = androidx.lifecycle.viewmodel.compose.viewModel(
+        factory = com.example.proyecto_apliacion.funcionalidades.panel_inicio.PanelInicioViewModelFactory(repository)
+    )
+    val productos by viewModel.productos.collectAsState(initial = emptyList())
+
+    Scaffold(topBar = { TopAppBar(title = { Text("Kaiju Inventory · $rol") }) }) { padding ->
+        LazyColumn(Modifier.fillMaxSize().padding(padding).padding(20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+            item { Text("¡Hola, $usuario!", style = MaterialTheme.typography.headlineMedium); Text("Resumen de inventario y operaciones") }
+            item {
+                Card(Modifier.fillMaxWidth()) {
+                    Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text("Stock total", style = MaterialTheme.typography.titleMedium)
+                        Text("${productos.sumOf { it.stock }} unidades", style = MaterialTheme.typography.headlineLarge, color = MaterialTheme.colorScheme.primary)
+                        Text("${productos.size} productos registrados")
+                        Text(
+                            "Productos con stock bajo (≤ 10): ${productos.count { it.stock <= 10 }}",
+                            color = if (productos.any { it.stock <= 10 }) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
+                        )
+                    }
+                }
+            }
+            item { Button(onClick = onCatalogo, modifier = Modifier.fillMaxWidth()) { Text("Consultar catálogo y disponibilidad") } }
+            if (rol in listOf("ADMIN", "INVENTARIO")) item { OutlinedButton(onClick = onInventario, modifier = Modifier.fillMaxWidth()) { Text("Administrar inventario") } }
+            if (rol in listOf("ADMIN", "VENTAS")) item { OutlinedButton(onClick = onVentas, modifier = Modifier.fillMaxWidth()) { Text("Registrar venta") } }
+            if (rol in listOf("ADMIN", "INVENTARIO")) item { OutlinedButton(onClick = onMovimientos, modifier = Modifier.fillMaxWidth()) { Text("Ver movimientos") } }
+            if (rol == "ADMIN") item { OutlinedButton(onClick = onAdmin, modifier = Modifier.fillMaxWidth()) { Text("Gestionar usuarios y categorías") } }
+            item { OutlinedButton(onClick = onCerrarSesion, modifier = Modifier.fillMaxWidth()) { Text("Cerrar sesión") } }
+        }
+    }
 }

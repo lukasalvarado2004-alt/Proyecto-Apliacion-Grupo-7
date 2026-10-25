@@ -75,3 +75,8 @@ Nota: el alta de usuarios en esta versión administra el registro y el rol en SQ
 ## Integración de acceso y navegación
 
 Esta versión combina el acceso y registro de clientes con el panel comercial, inventario, movimientos, perfil y menú lateral. Los operadores de demostración son `admin / 1234`, `ventas / 5678` e `inventario / 0000`. Los clientes se registran y validan contra Room/SQLite. El acceso como invitado abre el catálogo sin credenciales.
+
+
+## Integración de acceso y navegación
+
+Esta versión combina el acceso y registro de clientes con el panel comercial, inventario, movimientos, perfil y menú lateral. Los operadores de demostración son `admin / 1234`, `ventas / 5678` e `inventario / 0000`. Los clientes se registran y validan contra Room/SQLite. El acceso como invitado abre el catálogo sin credenciales.

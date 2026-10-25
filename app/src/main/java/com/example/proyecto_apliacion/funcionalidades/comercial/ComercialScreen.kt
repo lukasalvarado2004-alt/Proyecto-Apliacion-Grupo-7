@@ -8,7 +8,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
-import androidx.room.withTransaction
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.proyecto_apliacion.data.*
 import kotlinx.coroutines.launch
 import java.text.NumberFormat
@@ -21,27 +21,84 @@ private fun clp(n: Long) = NumberFormat.getCurrencyInstance(Locale("es", "CL")).
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun VentasScreen(usuarioActual: String) {
- val ctx= LocalContext.current; val db= remember { KaijuDatabase.obtener(ctx) }; val scope= rememberCoroutineScope()
- val productos by db.productoDao().observarTodos().collectAsState(initial= emptyList())
- val ventas by db.ventaDao().observar().collectAsState(initial= emptyList())
- var seleccionado by remember { mutableStateOf("") }; var cantidad by remember { mutableStateOf("1") }; var aviso by remember { mutableStateOf("") }
- val hoy = remember { java.util.Calendar.getInstance().apply { set(java.util.Calendar.HOUR_OF_DAY,0);set(java.util.Calendar.MINUTE,0);set(java.util.Calendar.SECOND,0);set(java.util.Calendar.MILLISECOND,0) }.timeInMillis }
- val ventasHoy by db.ventaDao().ventasDesde(hoy).collectAsState(initial=0L)
- Scaffold(topBar={ TopAppBar(title={Text("Ventas y resumen comercial")}) }) { pad ->
- LazyColumn(Modifier.fillMaxSize().padding(pad).padding(16.dp), verticalArrangement=Arrangement.spacedBy(12.dp)) {
- item { Card(Modifier.fillMaxWidth()) { Column(Modifier.padding(16.dp)) { Text("Ventas de hoy",style=MaterialTheme.typography.titleMedium); Text(clp(ventasHoy),style=MaterialTheme.typography.headlineMedium,color=MaterialTheme.colorScheme.primary); Text("Transacciones registradas: ${ventas.count { it.fechaMillis >= hoy }}") } } }
- item { Text("Registrar venta",style=MaterialTheme.typography.titleLarge) }
- item { var expanded by remember { mutableStateOf(false) }; ExposedDropdownMenuBox(expanded=expanded,onExpandedChange={expanded=it}) { OutlinedTextField(value=productos.firstOrNull{it.id==seleccionado}?.let{"${it.nombre} · stock ${it.stock} · ${clp(it.precio.toLong())}"}?:"Selecciona un producto",onValueChange={},readOnly=true,label={Text("Producto disponible")},modifier=Modifier.menuAnchor().fillMaxWidth()); ExposedDropdownMenu(expanded=expanded,onDismissRequest={expanded=false}) { productos.filter{it.stock>0}.forEach { prod -> DropdownMenuItem(text={Text("${prod.nombre} · stock ${prod.stock}")},onClick={seleccionado=prod.id;expanded=false}) } } } }
- item { OutlinedTextField(value=cantidad,onValueChange={cantidad=it.filter(Char::isDigit)},label={Text("Cantidad")},modifier=Modifier.fillMaxWidth()) }
- item { val prod=productos.firstOrNull{it.id==seleccionado}; Text("Total: ${prod?.let { clp(it.precio.toLong() * (cantidad.toIntOrNull()?:0)) } ?: clp(0)}") }
- item { Button(modifier=Modifier.fillMaxWidth(),onClick={ scope.launch { val prod=productos.firstOrNull{it.id==seleccionado}; val qty=cantidad.toIntOrNull()?:0
- if(prod==null || qty<=0) aviso="Selecciona producto y cantidad válida" else if(qty>prod.stock) aviso="Stock insuficiente: disponible ${prod.stock}" else { db.withTransaction { val ventaId=db.ventaDao().insertar(Venta(usuario=usuarioActual,total=prod.precio.toLong()*qty)); db.ventaDao().insertarDetalles(listOf(DetalleVenta(ventaId=ventaId,productoId=prod.id,nombreProducto=prod.nombre,cantidad=qty,precioUnitario=prod.precio,subtotal=prod.precio.toLong()*qty))); db.productoDao().guardar(prod.copy(stock=prod.stock-qty)); db.movimientoDao().insertar(Movimiento(productoId=prod.id,nombreProducto=prod.nombre,tipo="VENTA",cantidad=qty,detalle="Venta #$ventaId por ${clp(prod.precio.toLong()*qty)} · usuario $usuarioActual")) }; aviso="Venta registrada correctamente"; seleccionado=""; cantidad="1" }
- } }) { Text("Confirmar venta y descontar stock") } }
- if(aviso.isNotBlank()) item { Text(aviso,color=MaterialTheme.colorScheme.primary) }
- item { HorizontalDivider(); Text("Historial de ventas",style=MaterialTheme.typography.titleLarge) }
- items(ventas.take(100),key={it.id}) { v -> Card(Modifier.fillMaxWidth()) { Column(Modifier.padding(12.dp)) { Text("Venta #${v.id} · ${clp(v.total)}",style=MaterialTheme.typography.titleMedium); Text("${SimpleDateFormat("dd/MM/yyyy HH:mm",Locale.getDefault()).format(Date(v.fechaMillis))} · ${v.usuario}"); Text(v.estado) } } }
- }
- }
+    val ctx = LocalContext.current
+    val db = remember { KaijuDatabase.obtener(ctx) }
+    val repoVentas = remember { ComercialRepository(db.ventaDao(), db.usuarioDao(), db.categoriaDao()) }
+    val repoProductos = remember { ProductoRepository(db.productoDao(), db.movimientoDao()) }
+    
+    val viewModel: VentasViewModel = viewModel(
+        factory = VentasViewModelFactory(repoVentas, repoProductos, db)
+    )
+
+    val productos by viewModel.productos.collectAsState(initial = emptyList())
+    val ventas by viewModel.ventas.collectAsState(initial = emptyList())
+    var seleccionado by remember { mutableStateOf("") }
+    var cantidad by remember { mutableStateOf("1") }
+    
+    val ventasHoy by viewModel.ventasHoy.collectAsState(initial = 0L)
+    val aviso by viewModel.aviso.collectAsState()
+
+    val hoy = remember { java.util.Calendar.getInstance().apply { set(java.util.Calendar.HOUR_OF_DAY,0);set(java.util.Calendar.MINUTE,0);set(java.util.Calendar.SECOND,0);set(java.util.Calendar.MILLISECOND,0) }.timeInMillis }
+
+    Scaffold(topBar = { TopAppBar(title = { Text("Ventas y resumen comercial") }) }) { pad ->
+        LazyColumn(Modifier.fillMaxSize().padding(pad).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            item {
+                Card(Modifier.fillMaxWidth()) {
+                    Column(Modifier.padding(16.dp)) {
+                        Text("Ventas de hoy", style = MaterialTheme.typography.titleMedium)
+                        Text(viewModel.formatClp(ventasHoy), style = MaterialTheme.typography.headlineMedium, color = MaterialTheme.colorScheme.primary)
+                        Text("Transacciones registradas: ${ventas.count { it.fechaMillis >= hoy }}")
+                    }
+                }
+            }
+            item { Text("Registrar venta", style = MaterialTheme.typography.titleLarge) }
+            item {
+                var expanded by remember { mutableStateOf(false) }
+                ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = it }) {
+                    OutlinedTextField(
+                        value = productos.firstOrNull { it.id == seleccionado }?.let { "${it.nombre} · stock ${it.stock} · ${viewModel.formatClp(it.precio.toLong())}" } ?: "Selecciona un producto",
+                        onValueChange = {},
+                        readOnly = true,
+                        label = { Text("Producto disponible") },
+                        modifier = Modifier.menuAnchor().fillMaxWidth()
+                    )
+                    ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+                        productos.filter { it.stock > 0 }.forEach { prod ->
+                            DropdownMenuItem(text = { Text("${prod.nombre} · stock ${prod.stock}") }, onClick = { seleccionado = prod.id; expanded = false })
+                        }
+                    }
+                }
+            }
+            item { OutlinedTextField(value = cantidad, onValueChange = { cantidad = it.filter(Char::isDigit) }, label = { Text("Cantidad") }, modifier = Modifier.fillMaxWidth()) }
+            item {
+                val prod = productos.firstOrNull { it.id == seleccionado }
+                Text("Total: ${prod?.let { viewModel.formatClp(it.precio.toLong() * (cantidad.toIntOrNull() ?: 0)) } ?: viewModel.formatClp(0)}")
+            }
+            item {
+                Button(
+                    modifier = Modifier.fillMaxWidth(),
+                    onClick = {
+                        val prod = productos.firstOrNull { it.id == seleccionado }
+                        viewModel.registrarVenta(usuarioActual, prod, cantidad) {
+                            seleccionado = ""
+                            cantidad = "1"
+                        }
+                    }
+                ) { Text("Confirmar venta y descontar stock") }
+            }
+            if (aviso.isNotBlank()) item { Text(aviso, color = MaterialTheme.colorScheme.primary) }
+            item { HorizontalDivider(); Text("Historial de ventas", style = MaterialTheme.typography.titleLarge) }
+            items(ventas.take(100), key = { it.id }) { v ->
+                Card(Modifier.fillMaxWidth()) {
+                    Column(Modifier.padding(12.dp)) {
+                        Text("Venta #${v.id} · ${viewModel.formatClp(v.total)}", style = MaterialTheme.typography.titleMedium)
+                        Text("${SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.getDefault()).format(Date(v.fechaMillis))} · ${v.usuario}")
+                        Text(v.estado)
+                    }
+                }
+            }
+        }
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -49,9 +106,12 @@ fun VentasScreen(usuarioActual: String) {
 fun AdministracionScreen() {
     val ctx = LocalContext.current
     val db = remember { KaijuDatabase.obtener(ctx) }
-    val scope = rememberCoroutineScope()
-    val usuarios by db.usuarioDao().observar().collectAsState(initial = emptyList())
-    val categorias by db.categoriaDao().observar().collectAsState(initial = emptyList())
+    val repo = remember { ComercialRepository(db.ventaDao(), db.usuarioDao(), db.categoriaDao()) }
+    
+    val viewModel: AdministracionViewModel = viewModel(factory = AdministracionViewModelFactory(repo))
+    
+    val usuarios by viewModel.usuarios.collectAsState(initial = emptyList())
+    val categorias by viewModel.categorias.collectAsState(initial = emptyList())
     var tab by remember { mutableIntStateOf(0) }
     var nombre by remember { mutableStateOf("") }
     var descripcion by remember { mutableStateOf("") }
@@ -59,30 +119,13 @@ fun AdministracionScreen() {
     var nombreUsuario by remember { mutableStateOf("") }
     var correo by remember { mutableStateOf("") }
     var rol by remember { mutableStateOf("VENTAS") }
-    var aviso by remember { mutableStateOf("") }
-
-    LaunchedEffect(Unit) {
-        if (db.usuarioDao().contar() == 0) {
-            listOf(
-                Usuario("admin", "Administrador", "ADMIN", correo = "admin@kaiju.cl"),
-                Usuario("ventas", "Personal de ventas", "VENTAS", correo = "ventas@kaiju.cl"),
-                Usuario("inventario", "Encargado de inventario", "INVENTARIO", correo = "inventario@kaiju.cl")
-            ).forEach { db.usuarioDao().guardar(it) }
-        }
-        if (db.categoriaDao().contar() == 0) {
-            listOf(
-                Categoria("Ropa", "Prendas y vestuario"),
-                Categoria("Mochilas", "Bolsos y mochilas"),
-                Categoria("Accesorios", "Accesorios Kaiju")
-            ).forEach { db.categoriaDao().guardar(it) }
-        }
-    }
+    val aviso by viewModel.aviso.collectAsState()
 
     Scaffold(topBar = { TopAppBar(title = { Text("Administración") }) }) { pad ->
         Column(Modifier.fillMaxSize().padding(pad).padding(16.dp)) {
             TabRow(selectedTabIndex = tab) {
-                Tab(tab == 0, { tab = 0 }, text = { Text("Usuarios") })
-                Tab(tab == 1, { tab = 1 }, text = { Text("Categorías") })
+                Tab(tab == 0, { viewModel.limpiarAviso(); tab = 0 }, text = { Text("Usuarios") })
+                Tab(tab == 1, { viewModel.limpiarAviso(); tab = 1 }, text = { Text("Categorías") })
             }
             if (tab == 0) {
                 LazyColumn(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -101,16 +144,10 @@ fun AdministracionScreen() {
                         }
                         Button(
                             onClick = {
-                                scope.launch {
-                                    if (username.isBlank() || nombreUsuario.isBlank()) {
-                                        aviso = "Completa usuario y nombre"
-                                    } else {
-                                        db.usuarioDao().guardar(Usuario(username.trim(), nombreUsuario.trim(), rol, true, correo.trim()))
-                                        aviso = "Usuario guardado"
-                                        username = ""
-                                        nombreUsuario = ""
-                                        correo = ""
-                                    }
+                                viewModel.guardarUsuario(username, nombreUsuario, correo, rol) {
+                                    username = ""
+                                    nombreUsuario = ""
+                                    correo = ""
                                 }
                             },
                             modifier = Modifier.fillMaxWidth()
@@ -129,9 +166,9 @@ fun AdministracionScreen() {
                                     Text(if (u.activo) "Activo" else "Deshabilitado")
                                 }
                                 Column {
-                                    TextButton(onClick = { scope.launch { db.usuarioDao().cambiarEstado(u.username, !u.activo) } }) { Text(if (u.activo) "Desactivar" else "Activar") }
+                                    TextButton(onClick = { viewModel.cambiarEstadoUsuario(u.username, !u.activo) }) { Text(if (u.activo) "Desactivar" else "Activar") }
                                     if (u.username != "admin") {
-                                        TextButton(onClick = { scope.launch { db.usuarioDao().eliminar(u.username) } }) { Text("Eliminar") }
+                                        TextButton(onClick = { viewModel.eliminarUsuario(u.username) }) { Text("Eliminar") }
                                     }
                                 }
                             }
@@ -145,15 +182,9 @@ fun AdministracionScreen() {
                         OutlinedTextField(descripcion, { descripcion = it }, label = { Text("Descripción") }, modifier = Modifier.fillMaxWidth())
                         Button(
                             onClick = {
-                                scope.launch {
-                                    if (nombre.trim().length < 2) {
-                                        aviso = "El nombre debe tener al menos 2 caracteres"
-                                    } else {
-                                        db.categoriaDao().guardar(Categoria(nombre.trim(), descripcion.trim()))
-                                        aviso = "Categoría guardada"
-                                        nombre = ""
-                                        descripcion = ""
-                                    }
+                                viewModel.guardarCategoria(nombre, descripcion) {
+                                    nombre = ""
+                                    descripcion = ""
                                 }
                             },
                             modifier = Modifier.fillMaxWidth()
@@ -168,8 +199,8 @@ fun AdministracionScreen() {
                                     Text(if (c.activa) "Activa" else "Inactiva")
                                 }
                                 Column {
-                                    TextButton(onClick = { scope.launch { db.categoriaDao().cambiarEstado(c.nombre, !c.activa) } }) { Text(if (c.activa) "Desactivar" else "Activar") }
-                                    TextButton(onClick = { scope.launch { db.categoriaDao().eliminar(c.nombre) } }) { Text("Eliminar") }
+                                    TextButton(onClick = { viewModel.cambiarEstadoCategoria(c.nombre, !c.activa) }) { Text(if (c.activa) "Desactivar" else "Activar") }
+                                    TextButton(onClick = { viewModel.eliminarCategoria(c.nombre) }) { Text("Eliminar") }
                                 }
                             }
                         }
