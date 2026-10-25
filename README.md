@@ -34,8 +34,6 @@ La aplicación utiliza SQLite local a través de Android Room. Los productos y e
 - `funcionalidades/inventario/`: pantalla, estado y validaciones del inventario.
 - `MainActivity.kt`: navegación principal y lanzadores de recursos nativos.
 
-## Entrega y colaboración
-La rúbrica también exige evidencia externa real de commits distribuidos y planificación colaborativa en GitHub/Trello. Esta copia ZIP no puede crear ni demostrar actividad histórica de un repositorio ni tareas compartidas; el equipo debe subir el proyecto a su repositorio y completar esos artefactos.
 
 ## Funcionalidades ampliadas (EP3)
 
