@@ -38,6 +38,10 @@ android {
 
 dependencies {
     // AndroidX & Compose Core
+    // Retrofit
+    implementation("com.squareup.retrofit2:retrofit:2.9.0")
+// Gson Converter (Para transformar el JSON a tus DTOs)
+    implementation("com.squareup.retrofit2:converter-gson:2.9.0")
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.compose.material3)
