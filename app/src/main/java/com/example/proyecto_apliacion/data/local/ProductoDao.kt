@@ -1,4 +1,4 @@
-package com.example.proyecto_apliacion.data
+package com.example.proyecto_apliacion.data.local
 
 import androidx.room.Dao
 import androidx.room.Insert
