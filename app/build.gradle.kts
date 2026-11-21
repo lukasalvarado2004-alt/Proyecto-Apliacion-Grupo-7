@@ -37,6 +37,8 @@ android {
 }
 
 dependencies {
+
+    implementation("androidx.security:security-crypto:1.1.0-alpha06")
     // AndroidX & Compose Core
     // Retrofit
     implementation("com.squareup.retrofit2:retrofit:2.9.0")

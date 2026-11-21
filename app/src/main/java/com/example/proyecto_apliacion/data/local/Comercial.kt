@@ -1,10 +1,20 @@
-package com.example.proyecto_apliacion.data
+package com.example.proyecto_apliacion.data.local
 
 import androidx.room.Entity
 import androidx.room.PrimaryKey
 
 @Entity(tableName = "usuarios")
-data class Usuario(@PrimaryKey val username: String, val nombre: String, val rol: String, val activo: Boolean = true, val correo: String = "", val clave: String = "")
+data class Usuario(
+    @PrimaryKey val username: String,
+    val nombre: String,
+    val rol: String,
+    val activo: Boolean = true,
+    val correo: String = "",
+    val clave: String = "",
+    val telefono: String = "",
+    val direccion: String = "",
+    val idRemoto: Long? = null
+)
 
 @Entity(tableName = "categorias")
 data class Categoria(@PrimaryKey val nombre: String, val descripcion: String = "", val activa: Boolean = true)
