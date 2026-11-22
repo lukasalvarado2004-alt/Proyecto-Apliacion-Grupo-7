@@ -13,8 +13,7 @@ class AuthAuthenticator(private val sessionManager: SessionManager) : Authentica
         // 1. Borramos los datos locales porque la sesión ya no es válida
         sessionManager.cerrarSesion()
 
-        // 2. Aquí más adelante implementaremos un evento global para mandar al usuario al LoginScreen.
-        // Por ahora, simplemente retornamos null para que la petición falle limpiamente.
+
         return null
     }
 }

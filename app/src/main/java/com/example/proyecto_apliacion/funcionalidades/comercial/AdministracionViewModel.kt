@@ -44,7 +44,6 @@ class AdministracionViewModel(
             return
         }
         viewModelScope.launch {
-            // Llama a AWS y guarda local
             val resultado = usuarioRepository.registrarUsuario(
                 Usuario(
                     username = username.trim(),
@@ -52,7 +51,7 @@ class AdministracionViewModel(
                     rol = rol,
                     activo = true,
                     correo = correo.trim(),
-                    clave = "1234" // Contraseña por defecto para empleados desde el admin
+                    clave = "12345678" // Mínimo 8 caracteres exigido por AWS
                 )
             )
 

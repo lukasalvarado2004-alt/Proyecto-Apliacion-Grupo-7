@@ -1,5 +1,6 @@
 package com.example.proyecto_apliacion.data.remote
 
+import com.example.proyecto_apliacion.data.dto.CambioRolDTO
 import com.example.proyecto_apliacion.data.dto.LoginDTO
 import com.example.proyecto_apliacion.data.dto.TokenDTO
 import com.example.proyecto_apliacion.data.dto.UsuarioEntradaDTO
@@ -33,6 +34,12 @@ interface UsuarioApiService {
     suspend fun actualizarUsuario(
         @Path("id") id: Long,
         @Body entrada: UsuarioEntradaDTO
+    ): UsuarioSalidaDTO
+
+    @PATCH("api/v1/usuarios/{id}/rol")
+    suspend fun cambiarRolUsuario(
+        @Path("id") id: Long,
+        @Body cambioRol: CambioRolDTO
     ): UsuarioSalidaDTO
 
     // 6. Eliminar usuario

@@ -168,7 +168,7 @@ fun AdministracionScreen() {
     var username by remember { mutableStateOf("") }
     var nombreUsuario by remember { mutableStateOf("") }
     var correo by remember { mutableStateOf("") }
-    var rol by remember { mutableStateOf("VENTAS") }
+    var rol by remember { mutableStateOf("VENDEDOR") }
 
     val snackbarHostState = remember { SnackbarHostState() }
     var usuarioAConfirmarEliminacion by remember { mutableStateOf<Usuario?>(null) }
@@ -280,7 +280,7 @@ fun AdministracionScreen() {
                             expanded = rolExpandido,
                             onDismissRequest = { rolExpandido = false }
                         ) {
-                            listOf("ADMIN", "VENTAS", "INVENTARIO", "CLIENTE").forEach { opcion ->
+                            listOf("ADMINISTRADOR", "VENDEDOR", "INVENTARIO", "CLIENTE").forEach { opcion ->
                                 DropdownMenuItem(
                                     text = { Text(opcion) },
                                     onClick = {
@@ -383,7 +383,7 @@ fun AdministracionScreen() {
                                         .fillMaxWidth()
                                 )
                                 ExposedDropdownMenu(ex, { ex = false }) {
-                                    listOf("ADMIN", "VENTAS", "INVENTARIO").forEach {
+                                    listOf("ADMINISTRADOR", "VENDEDOR", "INVENTARIO", "CLIENTE").forEach {
                                         DropdownMenuItem(
                                             text = { Text(it) },
                                             onClick = { rol = it; ex = false }
