@@ -1,5 +1,7 @@
 package com.example.proyecto_apliacion.data.remote
 
+import com.example.proyecto_apliacion.data.dto.LoginDTO
+import com.example.proyecto_apliacion.data.dto.TokenDTO
 import com.example.proyecto_apliacion.data.dto.UsuarioEntradaDTO
 import com.example.proyecto_apliacion.data.dto.UsuarioSalidaDTO
 import retrofit2.Response
@@ -22,6 +24,9 @@ interface UsuarioApiService {
     // 4. Registrar un nuevo usuario
     @POST("api/v1/usuarios")
     suspend fun crearUsuario(@Body entrada: UsuarioEntradaDTO): Response<UsuarioSalidaDTO>
+
+    @POST("api/v1/auth/login")
+    suspend fun login(@Body credenciales: LoginDTO): TokenDTO
 
     // 5. Actualizar usuario
     @PUT("api/v1/usuarios/{id}")

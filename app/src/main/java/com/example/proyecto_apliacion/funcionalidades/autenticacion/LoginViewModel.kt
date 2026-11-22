@@ -6,9 +6,11 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.example.proyecto_apliacion.data.KaijuDatabase
-import com.example.proyecto_apliacion.data.Usuario
+import com.example.proyecto_apliacion.data.DefaultAppContainer
+import com.example.proyecto_apliacion.data.dto.LoginDTO
+import com.example.proyecto_apliacion.data.local.Usuario
 import kotlinx.coroutines.launch
+import retrofit2.HttpException
 
 class LoginViewModel : ViewModel() {
     var usuario by mutableStateOf("")
@@ -49,7 +51,7 @@ class LoginViewModel : ViewModel() {
             return
         }
 
-        // Accesos de operador requeridos para la evaluación.
+        // Accesos de operador requeridos para la evaluación (Modo Local/Demo)
         val claveOperador = when (usuarioLimpio) {
             "admin" -> "1234"
             "ventas" -> "5678"
@@ -68,25 +70,42 @@ class LoginViewModel : ViewModel() {
             return
         }
 
-        val db = KaijuDatabase.obtener(context)
+        // Conectamos a través del AppContainer para obtener los servicios de red seguros
+        val appContainer = DefaultAppContainer(context)
+        val apiService = appContainer.apiService
+        val sessionManager = appContainer.sessionManager
+
         viewModelScope.launch {
             try {
-                val cliente = db.usuarioDao().buscarPorCredenciales(usuarioLimpio, claveLimpia)
-                if (cliente != null) {
-                    // Conserva el correo/usuario ingresado para mostrarlo en la sesión.
-                    usuario = cliente?.username ?: usuarioLimpio
-                    esIngresoCliente = true
-                    loginExitoso = true
-                    mensajeError = null
-                } else {
-                    loginExitoso = false
-                    esIngresoCliente = false
-                    mensajeError = "Usuario o contraseña incorrectos."
-                }
-            } catch (_: Exception) {
+                // 1. Petición directa al backend AWS
+                val peticion = LoginDTO(
+                    correo = usuarioLimpio,
+                    contrasena = claveLimpia
+                )
+                val respuesta = apiService.login(peticion)
+
+                // 2. Guardar el JWT y el rol de forma segura en el dispositivo
+                sessionManager.guardarToken(respuesta.accessToken)
+                sessionManager.guardarRol(respuesta.rol ?: "CLIENTE")
+
+                // 3. Notificar a la UI del éxito
+                usuario = usuarioLimpio
+                esIngresoCliente = respuesta.rol == "CLIENTE"
+                loginExitoso = true
+                mensajeError = null
+
+            } catch (e: HttpException) {
                 loginExitoso = false
                 esIngresoCliente = false
-                mensajeError = "No se pudo validar el acceso. Inténtalo nuevamente."
+                mensajeError = if (e.code() == 401) {
+                    "Usuario o contraseña incorrectos."
+                } else {
+                    "Error del servidor (${e.code()})"
+                }
+            } catch (e: Exception) {
+                loginExitoso = false
+                esIngresoCliente = false
+                mensajeError = "No se pudo conectar con el servidor. Verifica tu internet."
             }
         }
     }
@@ -106,28 +125,36 @@ class LoginViewModel : ViewModel() {
             onError("Completa todos los campos.")
             return
         }
-        val db = KaijuDatabase.obtener(context)
+
+        val repository = DefaultAppContainer(context).usuarioRepository
+
         viewModelScope.launch {
-            try {
-                val existente = db.usuarioDao().buscarPorCorreo(correoLimpio)
-                if (existente != null) {
-                    onError("El correo ya está registrado.")
-                    return@launch
+            val nuevoUsuario = Usuario(
+                username = correoLimpio,
+                nombre = nombreLimpio,
+                rol = "CLIENTE",
+                activo = true,
+                correo = correoLimpio,
+                clave = claveLimpia
+            )
+
+            // Envía el registro a AWS (POST /api/v1/usuarios) y respalda en Room
+            val resultado = repository.registrarUsuario(nuevoUsuario)
+
+            resultado.fold(
+                onSuccess = {
+                    onExito()
+                },
+                onFailure = { error ->
+                    // Si AWS devuelve 409 (Conflict), captura el mensaje
+                    val mensaje = if (error.message?.contains("409") == true) {
+                        "El correo ya está registrado en el servidor."
+                    } else {
+                        error.message ?: "No se pudo registrar la cuenta."
+                    }
+                    onError(mensaje)
                 }
-                val username = correoLimpio
-                val nuevoUsuario = Usuario(
-                    username = username,
-                    nombre = nombreLimpio,
-                    rol = "CLIENTE",
-                    activo = true,
-                    correo = correoLimpio,
-                    clave = claveLimpia
-                )
-                db.usuarioDao().registrar(nuevoUsuario)
-                onExito()
-            } catch (_: Exception) {
-                onError("No se pudo registrar la cuenta. Comprueba si el correo ya existe.")
-            }
+            )
         }
     }
 }

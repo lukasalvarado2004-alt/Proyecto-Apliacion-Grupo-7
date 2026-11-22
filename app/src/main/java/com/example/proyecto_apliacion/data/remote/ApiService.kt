@@ -1,5 +1,7 @@
 package com.example.proyecto_apliacion.data.remote
 
+import com.example.proyecto_apliacion.data.dto.LoginDTO
+import com.example.proyecto_apliacion.data.dto.TokenDTO
 import com.example.proyecto_apliacion.data.dto.UsuarioEntradaDTO
 import com.example.proyecto_apliacion.data.dto.UsuarioSalidaDTO
 import retrofit2.Response
@@ -12,13 +14,11 @@ import retrofit2.http.Path
 
 interface ApiService {
 
-    @GET("api/v1/usuarios")
-    suspend fun obtenerUsuarios(): Response<List<UsuarioSalidaDTO>>
+    @POST("api/v1/auth/login")
+    suspend fun login(@Body credenciales: LoginDTO): TokenDTO
 
-    @POST("api/v1/usuarios")
-    suspend fun crearUsuario(
-        @Body usuario: UsuarioEntradaDTO
-    ): Response<UsuarioSalidaDTO>
+    @GET("api/v1/auth/me")
+    suspend fun obtenerMiPerfil(): UsuarioSalidaDTO
 
     @PUT("api/v1/usuarios/{id}")
     suspend fun actualizarUsuario(

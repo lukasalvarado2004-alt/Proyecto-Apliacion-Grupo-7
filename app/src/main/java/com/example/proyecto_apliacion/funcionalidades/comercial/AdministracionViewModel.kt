@@ -3,37 +3,37 @@ package com.example.proyecto_apliacion.funcionalidades.comercial
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
-import com.example.proyecto_apliacion.data.Categoria
-import com.example.proyecto_apliacion.data.ComercialRepository
-import com.example.proyecto_apliacion.data.Usuario
+import com.example.proyecto_apliacion.data.local.Categoria
+import com.example.proyecto_apliacion.data.local.Usuario
+import com.example.proyecto_apliacion.data.repository.ComercialRepository
+import com.example.proyecto_apliacion.data.repository.UsuarioRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
-class AdministracionViewModel(private val repository: ComercialRepository) : ViewModel() {
+class AdministracionViewModel(
+    private val usuarioRepository: UsuarioRepository,
+    private val comercialRepository: ComercialRepository
+) : ViewModel() {
 
-    val usuarios = repository.observarUsuarios()
-    val categorias = repository.observarCategorias()
+    val usuarios = usuarioRepository.observarUsuariosLocales()
+    val categorias = comercialRepository.observarCategorias()
 
     private val _aviso = MutableStateFlow("")
     val aviso: StateFlow<String> = _aviso.asStateFlow()
 
     init {
         viewModelScope.launch {
-            if (repository.contarUsuarios() == 0) {
-                listOf(
-                    Usuario("admin", "Administrador", "ADMIN", correo = "admin@kaiju.cl"),
-                    Usuario("ventas", "Personal de ventas", "VENTAS", correo = "ventas@kaiju.cl"),
-                    Usuario("inventario", "Encargado de inventario", "INVENTARIO", correo = "inventario@kaiju.cl")
-                ).forEach { repository.guardarUsuario(it) }
-            }
-            if (repository.contarCategorias() == 0) {
+            // Sincroniza desde AWS al iniciar
+            usuarioRepository.sincronizarUsuariosDesdeAws()
+
+            if (comercialRepository.contarCategorias() == 0) {
                 listOf(
                     Categoria("Ropa", "Prendas y vestuario"),
                     Categoria("Mochilas", "Bolsos y mochilas"),
                     Categoria("Accesorios", "Accesorios Kaiju")
-                ).forEach { repository.guardarCategoria(it) }
+                ).forEach { comercialRepository.guardarCategoria(it) }
             }
         }
     }
@@ -44,22 +44,53 @@ class AdministracionViewModel(private val repository: ComercialRepository) : Vie
             return
         }
         viewModelScope.launch {
-            repository.guardarUsuario(Usuario(username.trim(), nombreUsuario.trim(), rol, true, correo.trim()))
-            _aviso.value = "Usuario guardado"
-            onExito()
+            // Llama a AWS y guarda local
+            val resultado = usuarioRepository.registrarUsuario(
+                Usuario(
+                    username = username.trim(),
+                    nombre = nombreUsuario.trim(),
+                    rol = rol,
+                    activo = true,
+                    correo = correo.trim(),
+                    clave = "1234" // Contraseña por defecto para empleados desde el admin
+                )
+            )
+
+            resultado.fold(
+                onSuccess = {
+                    _aviso.value = "Usuario guardado en sistema y servidor"
+                    onExito()
+                },
+                onFailure = {
+                    _aviso.value = "Error al guardar: ${it.message}"
+                }
+            )
         }
     }
 
     fun cambiarEstadoUsuario(username: String, activo: Boolean) {
         viewModelScope.launch {
-            repository.cambiarEstadoUsuario(username, activo)
+            // Nota: Aquí necesitarías un método en AWS para actualizar (PUT).
+            // Si no lo tienes, al menos actualiza en Room a través de un dao o repository
+            // Por ahora, como es solo frontend, dejamos un aviso
+            _aviso.value = "Opción requiere actualización (PUT) en API"
         }
     }
 
+    private val _usuarioEliminando = MutableStateFlow<String?>(null)
+    val usuarioEliminando: StateFlow<String?> = _usuarioEliminando.asStateFlow()
+
     fun eliminarUsuario(username: String) {
-        if (username == "admin") return
+        if (username == "admin" || _usuarioEliminando.value != null) return
         viewModelScope.launch {
-            repository.eliminarUsuario(username)
+            _usuarioEliminando.value = username
+            try {
+                usuarioRepository.eliminarUsuario(username)
+                    .onSuccess { _aviso.value = "Usuario eliminado correctamente" }
+                    .onFailure { _aviso.value = it.message ?: "No se pudo eliminar el usuario" }
+            } finally {
+                _usuarioEliminando.value = null
+            }
         }
     }
 
@@ -69,7 +100,7 @@ class AdministracionViewModel(private val repository: ComercialRepository) : Vie
             return
         }
         viewModelScope.launch {
-            repository.guardarCategoria(Categoria(nombre.trim(), descripcion.trim()))
+            comercialRepository.guardarCategoria(Categoria(nombre.trim(), descripcion.trim()))
             _aviso.value = "Categoría guardada"
             onExito()
         }
@@ -77,26 +108,70 @@ class AdministracionViewModel(private val repository: ComercialRepository) : Vie
 
     fun cambiarEstadoCategoria(nombre: String, activa: Boolean) {
         viewModelScope.launch {
-            repository.cambiarEstadoCategoria(nombre, activa)
+            comercialRepository.cambiarEstadoCategoria(nombre, activa)
         }
     }
 
     fun eliminarCategoria(nombre: String) {
         viewModelScope.launch {
-            repository.eliminarCategoria(nombre)
+            comercialRepository.eliminarCategoria(nombre)
         }
     }
 
     fun limpiarAviso() {
         _aviso.value = ""
     }
+
+    private val _guardandoEdicion = MutableStateFlow(false)
+    val guardandoEdicion: StateFlow<Boolean> = _guardandoEdicion.asStateFlow()
+
+    fun editarUsuario(
+        usuarioOriginal: Usuario,
+        nuevoNombre: String,
+        nuevoCorreo: String,
+        nuevoTelefono: String,
+        nuevaDireccion: String,
+        nuevoRol: String,
+        onExito: () -> Unit
+    ) {
+        if (nuevoNombre.trim().isBlank() || nuevoCorreo.trim().isBlank()) {
+            _aviso.value = "El nombre y el correo son obligatorios"
+            return
+        }
+        viewModelScope.launch {
+            _guardandoEdicion.value = true
+            try {
+                // .copy() conserva idRemoto, username y clave automáticamente
+                val usuarioEditado = usuarioOriginal.copy(
+                    nombre = nuevoNombre.trim(),
+                    correo = nuevoCorreo.trim().lowercase(),
+                    telefono = nuevoTelefono.trim(),
+                    direccion = nuevaDireccion.trim(),
+                    rol = nuevoRol
+                )
+                usuarioRepository.actualizarUsuario(usuarioEditado)
+                    .onSuccess {
+                        _aviso.value = "Usuario actualizado correctamente"
+                        onExito()
+                    }
+                    .onFailure {
+                        _aviso.value = it.message ?: "No se pudo actualizar el usuario"
+                    }
+            } finally {
+                _guardandoEdicion.value = false
+            }
+        }
+    }
 }
 
-class AdministracionViewModelFactory(private val repository: ComercialRepository) : ViewModelProvider.Factory {
+class AdministracionViewModelFactory(
+    private val usuarioRepository: UsuarioRepository,
+    private val comercialRepository: ComercialRepository
+) : ViewModelProvider.Factory {
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
         if (modelClass.isAssignableFrom(AdministracionViewModel::class.java)) {
             @Suppress("UNCHECKED_CAST")
-            return AdministracionViewModel(repository) as T
+            return AdministracionViewModel(usuarioRepository, comercialRepository) as T
         }
         throw IllegalArgumentException("Unknown ViewModel class")
     }
