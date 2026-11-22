@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
@@ -23,30 +24,37 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import androidx.lifecycle.viewmodel.initializer
-import androidx.lifecycle.viewmodel.viewModelFactory
 import coil.compose.AsyncImage
 import com.example.proyecto_apliacion.R
-import com.example.proyecto_apliacion.data.KaijuDatabase
-import com.example.proyecto_apliacion.data.Producto
-import com.example.proyecto_apliacion.data.ProductoRepository
+import com.example.proyecto_apliacion.data.DefaultAppContainer
+import com.example.proyecto_apliacion.data.local.Producto
 import java.io.File
 import java.io.FileOutputStream
+import java.text.NumberFormat
+import java.util.Collections.emptyMap
+import java.util.Locale
+
+private fun clp(valor: Number): String =
+    NumberFormat.getCurrencyInstance(Locale("es", "CL")).format(valor.toLong())
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun InventarioScreen(onVolverClick: () -> Unit, modifier: Modifier = Modifier) {
     val context = LocalContext.current
-    val db = remember { KaijuDatabase.obtener(context) }
-    val vm: InventarioViewModel = viewModel(factory = viewModelFactory {
-        initializer { InventarioViewModel(ProductoRepository(db.productoDao(), db.movimientoDao())) }
-    })
+    val container = remember { DefaultAppContainer(context) }
+
+    val vm: InventarioViewModel = viewModel(
+        factory = InventarioViewModelFactory(container.productoRepository)
+    )
+
     val state by vm.uiState.collectAsState()
     var id by remember { mutableStateOf("") }
     var nombre by remember { mutableStateOf("") }
@@ -57,11 +65,36 @@ fun InventarioScreen(onVolverClick: () -> Unit, modifier: Modifier = Modifier) {
     var imagenSeleccionada by remember { mutableStateOf<Uri?>(null) }
     var bitmapCamara by remember { mutableStateOf<Bitmap?>(null) }
     var errorImagen by remember { mutableStateOf<String?>(null) }
-
-    // Estado para saber cuál producto se está editando
     var productoAEditar by remember { mutableStateOf<Producto?>(null) }
 
-    // Muestra una notificación emergente (Toast) cuando se realiza una acción exitosa
+    // Estados de API externa open.er-api.com (Dólar y divisas)
+    var tasas by remember { mutableStateOf<Map<String, Double>>(emptyMap()) }
+    var cargandoDivisas by remember { mutableStateOf(true) }
+    var errorDivisas by remember { mutableStateOf<String?>(null) }
+    var verEnDolares by remember { mutableStateOf(false) }
+    var recargarTrigger by remember { mutableIntStateOf(0) }
+
+    val valorDolarClp: Double? = tasas["CLP"]
+    val valorEuroClp: Double? = remember(tasas) {
+        val clpRate = tasas["CLP"]
+        val eurRate = tasas["EUR"]
+        if (clpRate != null && eurRate != null && eurRate > 0.0) clpRate / eurRate else null
+    }
+
+    LaunchedEffect(recargarTrigger) {
+        cargandoDivisas = true
+        errorDivisas = null
+        try {
+            val respuesta = container.indicadoresApiService.obtenerTasasCambio()
+            tasas = respuesta.rates
+        } catch (e: Exception) {
+            tasas = emptyMap()
+            errorDivisas = e.javaClass.simpleName
+        } finally {
+            cargandoDivisas = false
+        }
+    }
+
     LaunchedEffect(state.mensaje) {
         state.mensaje?.let { msg ->
             Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
@@ -121,7 +154,7 @@ fun InventarioScreen(onVolverClick: () -> Unit, modifier: Modifier = Modifier) {
             floatingActionButton = {
                 FloatingActionButton(onClick = {
                     mostrarFormulario = !mostrarFormulario
-                    if (mostrarFormulario.not()) {
+                    if (!mostrarFormulario) {
                         id = ""; nombre = ""; stock = ""; precio = ""
                         imagenSeleccionada = null; bitmapCamara = null
                         vm.limpiarMensaje()
@@ -131,187 +164,273 @@ fun InventarioScreen(onVolverClick: () -> Unit, modifier: Modifier = Modifier) {
                 }
             }
         ) { padding ->
-            Column(
-                Modifier
+            LazyColumn(
+                modifier = Modifier
                     .padding(padding)
                     .fillMaxSize()
-                    .padding(16.dp),
+                    .imePadding(),
+                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 88.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                OutlinedTextField(
-                    value = state.busqueda,
-                    onValueChange = vm::cambiarBusqueda,
-                    label = { Text("Buscar producto o código") },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true
-                )
-                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    listOf("Todos", "Ropa", "Mochilas", "Accesorios").forEach { cat ->
-                        FilterChip(
-                            selected = state.categoria == cat,
-                            onClick = { vm.cambiarCategoria(cat) },
-                            label = { Text(cat) }
+                item {
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.secondaryContainer
                         )
-                    }
-                }
-                AnimatedVisibility(visible = mostrarFormulario) {
-                    Card(Modifier.fillMaxWidth().heightIn(max = 420.dp)) {
+                    ) {
                         Column(
-                            Modifier
+                            modifier = Modifier
                                 .fillMaxWidth()
-                                .verticalScroll(rememberScrollState())
                                 .padding(12.dp),
                             verticalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            Text("Nuevo producto", style = MaterialTheme.typography.titleMedium)
-                            OutlinedTextField(
-                                value = id,
-                                onValueChange = { id = it; vm.limpiarMensaje() },
-                                label = { Text("Código (ej. K007)") },
+                            Row(
                                 modifier = Modifier.fillMaxWidth(),
-                                singleLine = true
-                            )
-                            OutlinedTextField(
-                                value = nombre,
-                                onValueChange = { nombre = it; vm.limpiarMensaje() },
-                                label = { Text("Nombre") },
-                                modifier = Modifier.fillMaxWidth(),
-                                singleLine = true
-                            )
-                            Text("Categoría")
-                            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                                listOf("Ropa", "Mochilas", "Accesorios").forEach { cat ->
-                                    FilterChip(
-                                        selected = categoria == cat,
-                                        onClick = { categoria = cat },
-                                        label = { Text(cat) }
-                                    )
-                                }
-                            }
-                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                OutlinedTextField(
-                                    value = stock,
-                                    onValueChange = { stock = it.filter(Char::isDigit); vm.limpiarMensaje() },
-                                    label = { Text("Stock") },
-                                    modifier = Modifier.weight(1f),
-                                    singleLine = true
-                                )
-                                OutlinedTextField(
-                                    value = precio,
-                                    onValueChange = { precio = it.filter(Char::isDigit); vm.limpiarMensaje() },
-                                    label = { Text("Precio CLP") },
-                                    modifier = Modifier.weight(1f),
-                                    singleLine = true
-                                )
-                            }
-                            Text("Fotografía del producto (opcional)", style = MaterialTheme.typography.labelLarge)
-                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                OutlinedButton(
-                                    onClick = { launcherCamara.launch(null) },
-                                    modifier = Modifier.weight(1f)
-                                ) {
-                                    Icon(Icons.Default.CameraAlt, null)
-                                    Spacer(Modifier.width(5.dp))
-                                    Text("Tomar foto")
-                                }
-                                OutlinedButton(
-                                    onClick = { launcherGaleria.launch("image/*") },
-                                    modifier = Modifier.weight(1f)
-                                ) {
-                                    Icon(Icons.Default.Collections, null)
-                                    Spacer(Modifier.width(5.dp))
-                                    Text("Galería")
-                                }
-                            }
-                            AnimatedVisibility(imagenSeleccionada != null) {
-                                AsyncImage(
-                                    model = imagenSeleccionada,
-                                    contentDescription = "Foto del producto",
-                                    modifier = Modifier.fillMaxWidth().height(150.dp),
-                                    contentScale = ContentScale.Crop
-                                )
-                            }
-                            if (imagenSeleccionada != null) {
-                                TextButton(onClick = { imagenSeleccionada = null; bitmapCamara = null }) {
-                                    Text("Quitar fotografía")
-                                }
-                            }
-                            errorImagen?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-                            state.errorFormulario?.let { Text("⚠ $it", color = MaterialTheme.colorScheme.error) }
-                            Button(
-                                onClick = {
-                                    vm.guardar(id, nombre, categoria, stock, precio, imagenSeleccionada?.toString())
-                                },
-                                modifier = Modifier.fillMaxWidth()
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Text("Guardar producto")
+                                Column(Modifier.weight(1f)) {
+                                    Text(
+                                        "Tipo de cambio en vivo (ExchangeRate API)",
+                                        style = MaterialTheme.typography.labelMedium
+                                    )
+                                    when {
+                                        cargandoDivisas -> Text(
+                                            "Consultando dólar...",
+                                            style = MaterialTheme.typography.bodyMedium
+                                        )
+                                        valorDolarClp != null -> {
+                                            val eurTexto = valorEuroClp?.let { " · 1 EUR = ${clp(it)}" } ?: ""
+                                            Text(
+                                                "1 USD = ${clp(valorDolarClp)}$eurTexto",
+                                                style = MaterialTheme.typography.titleSmall,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                        }
+                                        else -> Text(
+                                            "Sin conexión (${errorDivisas ?: "Error"})",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.error
+                                        )
+                                    }
+                                }
+                                if (valorDolarClp != null) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                    ) {
+                                        Text("USD", style = MaterialTheme.typography.labelLarge)
+                                        Switch(
+                                            checked = verEnDolares,
+                                            onCheckedChange = { verEnDolares = it }
+                                        )
+                                    }
+                                } else {
+                                    TextButton(
+                                        onClick = { recargarTrigger++ },
+                                        enabled = !cargandoDivisas
+                                    ) {
+                                        Text("Reintentar")
+                                    }
+                                }
+                            }
+
+                            if (tasas.isNotEmpty()) {
+                                GraficoDivisas(tasas = tasas)
                             }
                         }
                     }
                 }
-                Text("Productos: ${state.filtrados.size}", style = MaterialTheme.typography.titleMedium)
-                LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    items(state.filtrados, key = { it.id }) { producto ->
+
+                item {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedTextField(
+                            value = state.busqueda,
+                            onValueChange = vm::cambiarBusqueda,
+                            label = { Text("Buscar producto o código") },
+                            modifier = Modifier.fillMaxWidth(),
+                            singleLine = true
+                        )
+                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                            listOf("Todos", "Ropa", "Mochilas", "Accesorios").forEach { cat ->
+                                FilterChip(
+                                    selected = state.categoria == cat,
+                                    onClick = { vm.cambiarCategoria(cat) },
+                                    label = { Text(cat) }
+                                )
+                            }
+                        }
+                    }
+                }
+
+                item {
+                    AnimatedVisibility(visible = mostrarFormulario) {
                         Card(Modifier.fillMaxWidth()) {
-                            Row(
-                                Modifier.fillMaxWidth().padding(12.dp),
-                                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            Column(
+                                Modifier
+                                    .fillMaxWidth()
+                                    .padding(12.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
-                                if (!producto.imagenUri.isNullOrBlank()) {
+                                Text("Nuevo producto", style = MaterialTheme.typography.titleMedium)
+                                OutlinedTextField(
+                                    value = id,
+                                    onValueChange = { id = it; vm.limpiarMensaje() },
+                                    label = { Text("Código (ej. K007)") },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    singleLine = true
+                                )
+                                OutlinedTextField(
+                                    value = nombre,
+                                    onValueChange = { nombre = it; vm.limpiarMensaje() },
+                                    label = { Text("Nombre") },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    singleLine = true
+                                )
+                                Text("Categoría")
+                                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    listOf("Ropa", "Mochilas", "Accesorios").forEach { cat ->
+                                        FilterChip(
+                                            selected = categoria == cat,
+                                            onClick = { categoria = cat },
+                                            label = { Text(cat) }
+                                        )
+                                    }
+                                }
+                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    OutlinedTextField(
+                                        value = stock,
+                                        onValueChange = { stock = it.filter(Char::isDigit); vm.limpiarMensaje() },
+                                        label = { Text("Stock") },
+                                        modifier = Modifier.weight(1f),
+                                        singleLine = true
+                                    )
+                                    OutlinedTextField(
+                                        value = precio,
+                                        onValueChange = { precio = it.filter(Char::isDigit); vm.limpiarMensaje() },
+                                        label = { Text("Precio CLP") },
+                                        modifier = Modifier.weight(1f),
+                                        singleLine = true
+                                    )
+                                }
+                                Text("Fotografía del producto (opcional)", style = MaterialTheme.typography.labelLarge)
+                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    OutlinedButton(
+                                        onClick = { launcherCamara.launch(null) },
+                                        modifier = Modifier.weight(1f)
+                                    ) {
+                                        Icon(Icons.Default.CameraAlt, null)
+                                        Spacer(Modifier.width(5.dp))
+                                        Text("Tomar foto")
+                                    }
+                                    OutlinedButton(
+                                        onClick = { launcherGaleria.launch("image/*") },
+                                        modifier = Modifier.weight(1f)
+                                    ) {
+                                        Icon(Icons.Default.Collections, null)
+                                        Spacer(Modifier.width(5.dp))
+                                        Text("Galería")
+                                    }
+                                }
+                                AnimatedVisibility(imagenSeleccionada != null) {
                                     AsyncImage(
-                                        model = producto.imagenUri,
-                                        contentDescription = "Foto de ${producto.nombre}",
+                                        model = imagenSeleccionada,
+                                        contentDescription = "Foto del producto",
+                                        modifier = Modifier.fillMaxWidth().height(150.dp),
+                                        contentScale = ContentScale.Crop
+                                    )
+                                }
+                                if (imagenSeleccionada != null) {
+                                    TextButton(onClick = { imagenSeleccionada = null; bitmapCamara = null }) {
+                                        Text("Quitar fotografía")
+                                    }
+                                }
+                                errorImagen?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+                                state.errorFormulario?.let { Text("⚠ $it", color = MaterialTheme.colorScheme.error) }
+                                Button(
+                                    onClick = {
+                                        vm.guardar(id, nombre, categoria, stock, precio, imagenSeleccionada?.toString())
+                                    },
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Text("Guardar producto")
+                                }
+                            }
+                        }
+                    }
+                }
+
+                item {
+                    Text("Productos: ${state.filtrados.size}", style = MaterialTheme.typography.titleMedium)
+                }
+
+                items(state.filtrados, key = { it.id }) { producto ->
+                    val precioMostrado = if (verEnDolares && valorDolarClp != null && valorDolarClp > 0) {
+                        String.format(Locale.US, "US$ %.2f", producto.precio.toDouble() / valorDolarClp)
+                    } else {
+                        clp(producto.precio)
+                    }
+
+                    Card(Modifier.fillMaxWidth()) {
+                        Row(
+                            Modifier.fillMaxWidth().padding(12.dp),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            if (!producto.imagenUri.isNullOrBlank()) {
+                                AsyncImage(
+                                    model = producto.imagenUri,
+                                    contentDescription = "Foto de ${producto.nombre}",
+                                    modifier = Modifier.size(82.dp),
+                                    contentScale = ContentScale.Crop
+                                )
+                            } else {
+                                val imagenPredeterminada = when (producto.id.uppercase()) {
+                                    "K001" -> R.drawable.producto_k001
+                                    "K002" -> R.drawable.producto_k002
+                                    "K003" -> R.drawable.producto_k003
+                                    "K004" -> R.drawable.producto_k004
+                                    "K005" -> R.drawable.producto_k005
+                                    "K006" -> R.drawable.producto_k006
+                                    else -> null
+                                }
+                                if (imagenPredeterminada != null) {
+                                    Image(
+                                        painter = painterResource(imagenPredeterminada),
+                                        contentDescription = "Imagen de ${producto.nombre}",
                                         modifier = Modifier.size(82.dp),
                                         contentScale = ContentScale.Crop
                                     )
                                 } else {
-                                    val imagenPredeterminada = when (producto.id.uppercase()) {
-                                        "K001" -> R.drawable.producto_k001
-                                        "K002" -> R.drawable.producto_k002
-                                        "K003" -> R.drawable.producto_k003
-                                        "K004" -> R.drawable.producto_k004
-                                        "K005" -> R.drawable.producto_k005
-                                        "K006" -> R.drawable.producto_k006
-                                        else -> null
-                                    }
-                                    if (imagenPredeterminada != null) {
-                                        Image(
-                                            painter = painterResource(imagenPredeterminada),
-                                            contentDescription = "Imagen de ${producto.nombre}",
-                                            modifier = Modifier.size(82.dp),
-                                            contentScale = ContentScale.Crop
+                                    Surface(
+                                        Modifier.size(82.dp),
+                                        color = MaterialTheme.colorScheme.surfaceVariant
+                                    ) {
+                                        Icon(
+                                            Icons.Default.Image,
+                                            contentDescription = "Sin foto",
+                                            modifier = Modifier.padding(24.dp)
                                         )
-                                    } else {
-                                        Surface(
-                                            Modifier.size(82.dp),
-                                            color = MaterialTheme.colorScheme.surfaceVariant
-                                        ) {
-                                            Icon(
-                                                Icons.Default.Image,
-                                                contentDescription = "Sin foto",
-                                                modifier = Modifier.padding(24.dp)
-                                            )
-                                        }
                                     }
                                 }
-                                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                                    Text(producto.nombre, style = MaterialTheme.typography.titleMedium)
-                                    Text("${producto.id} · ${producto.categoria}", style = MaterialTheme.typography.bodySmall)
-                                    Text("Stock: ${producto.stock} · $${producto.precio}")
+                            }
+                            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                                Text(producto.nombre, style = MaterialTheme.typography.titleMedium)
+                                Text("${producto.id} · ${producto.categoria}", style = MaterialTheme.typography.bodySmall)
+                                Text("Stock: ${producto.stock} · $precioMostrado")
 
-                                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                        TextButton(
-                                            onClick = { productoAEditar = producto },
-                                            contentPadding = PaddingValues(0.dp)
-                                        ) {
-                                            Text("Editar")
-                                        }
-                                        TextButton(
-                                            onClick = { vm.eliminar(producto.id) },
-                                            contentPadding = PaddingValues(0.dp)
-                                        ) {
-                                            Text("Eliminar", color = MaterialTheme.colorScheme.error)
-                                        }
+                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    TextButton(
+                                        onClick = { productoAEditar = producto },
+                                        contentPadding = PaddingValues(0.dp)
+                                    ) {
+                                        Text("Editar")
+                                    }
+                                    TextButton(
+                                        onClick = { vm.eliminar(producto.id) },
+                                        contentPadding = PaddingValues(0.dp)
+                                    ) {
+                                        Text("Eliminar", color = MaterialTheme.colorScheme.error)
                                     }
                                 }
                             }
@@ -320,7 +439,6 @@ fun InventarioScreen(onVolverClick: () -> Unit, modifier: Modifier = Modifier) {
                 }
             }
 
-            // Diálogo modal de edición
             productoAEditar?.let { prod ->
                 DialogEditarProducto(
                     producto = prod,
@@ -333,7 +451,6 @@ fun InventarioScreen(onVolverClick: () -> Unit, modifier: Modifier = Modifier) {
             }
         }
 
-        // Overlay de carga (rueda tipo spinner) que bloquea la pantalla mientras procesa
         if (state.cargando) {
             Box(
                 modifier = Modifier
@@ -358,6 +475,61 @@ fun InventarioScreen(onVolverClick: () -> Unit, modifier: Modifier = Modifier) {
                         Text("Procesando...", style = MaterialTheme.typography.bodyMedium)
                     }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun GraficoDivisas(tasas: Map<String, Double>) {
+    val monedas = listOf("CLP", "ARS", "MXN", "BRL", "PEN")
+    val valores = monedas.mapNotNull { code -> tasas[code]?.let { code to it } }
+    if (valores.isEmpty()) return
+
+    val maxValor = valores.maxOf { it.second }.coerceAtLeast(1.0)
+
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text(
+            "Equivalencia de 1 USD en monedas de la región",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.8f)
+        )
+        valores.forEach { (moneda, tasa) ->
+            val fraccion = (tasa / maxValor).toFloat().coerceIn(0.06f, 1f)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text(
+                    text = moneda,
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.width(34.dp)
+                )
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(10.dp)
+                        .clip(RoundedCornerShape(5.dp))
+                        .background(MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.12f))
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth(fraccion)
+                            .fillMaxHeight()
+                            .clip(RoundedCornerShape(5.dp))
+                            .background(
+                                if (moneda == "CLP") MaterialTheme.colorScheme.primary
+                                else MaterialTheme.colorScheme.tertiary
+                            )
+                    )
+                }
+                Text(
+                    text = String.format(Locale.US, "%.1f", tasa),
+                    style = MaterialTheme.typography.labelSmall,
+                    modifier = Modifier.width(56.dp)
+                )
             }
         }
     }
@@ -418,23 +590,12 @@ fun DialogEditarProducto(
         confirmButton = {
             Button(
                 onClick = {
-                    onConfirm(
-                        producto.id,
-                        nombre,
-                        categoria,
-                        stock,
-                        precio,
-                        producto.imagenUri
-                    )
+                    onConfirm(producto.id, nombre, categoria, stock, precio, producto.imagenUri)
                 }
-            ) {
-                Text("Guardar cambios")
-            }
+            ) { Text("Guardar cambios") }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Cancelar")
-            }
+            TextButton(onClick = onDismiss) { Text("Cancelar") }
         }
     )
 }

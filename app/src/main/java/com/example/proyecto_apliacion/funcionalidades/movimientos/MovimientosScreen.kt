@@ -13,9 +13,9 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
-import com.example.proyecto_apliacion.data.KaijuDatabase
-import com.example.proyecto_apliacion.data.Movimiento
-import com.example.proyecto_apliacion.data.ProductoRepository
+import com.example.proyecto_apliacion.data.local.KaijuDatabase
+import com.example.proyecto_apliacion.data.local.Movimiento
+import com.example.proyecto_apliacion.data.repository.ProductoRepository
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale

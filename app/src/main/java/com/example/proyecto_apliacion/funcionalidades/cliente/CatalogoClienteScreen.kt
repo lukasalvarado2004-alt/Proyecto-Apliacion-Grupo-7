@@ -1,5 +1,7 @@
 package com.example.proyecto_apliacion.funcionalidades.cliente
 
+import androidx.compose.animation.*
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -10,6 +12,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Image as ImageIcon
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -28,8 +32,26 @@ import com.example.proyecto_apliacion.data.local.Producto
 @Composable
 fun CatalogoClienteScreen(onVolverClick: () -> Unit) {
     var seleccionado by remember { mutableStateOf<Producto?>(null) }
-    if (seleccionado == null) CatalogoLista(onVolverClick, { seleccionado = it })
-    else CatalogoDetalle(seleccionado!!, { seleccionado = null })
+
+    AnimatedContent(
+        targetState = seleccionado,
+        transitionSpec = {
+            if (targetState != null) {
+                (fadeIn(tween(280)) + slideInHorizontally(tween(280)) { it / 2 })
+                    .togetherWith(fadeOut(tween(200)))
+            } else {
+                (fadeIn(tween(280)) + slideInHorizontally(tween(280)) { -it / 2 })
+                    .togetherWith(fadeOut(tween(200)))
+            }
+        },
+        label = "TransicionCatalogoDetalle"
+    ) { prodActual ->
+        if (prodActual == null) {
+            CatalogoLista(onVolverClick = onVolverClick, onProductoClick = { seleccionado = it })
+        } else {
+            CatalogoDetalle(producto = prodActual, onVolverClick = { seleccionado = null })
+        }
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -41,6 +63,7 @@ private fun CatalogoLista(onVolverClick: () -> Unit, onProductoClick: (Producto)
 
     var busqueda by remember { mutableStateOf("") }
     var categoria by remember { mutableStateOf("Todos") }
+    var expandidoId by remember { mutableStateOf<String?>(null) }
     val categorias = listOf("Todos", "Ropa", "Mochilas", "Accesorios")
 
     val filtrados = productos.filter { p ->
@@ -86,29 +109,54 @@ private fun CatalogoLista(onVolverClick: () -> Unit, onProductoClick: (Producto)
             Text("Productos disponibles: ${filtrados.size}", style = MaterialTheme.typography.bodySmall)
             LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 items(filtrados, key = { it.id }) { p ->
-                    Card(Modifier.fillMaxWidth().clickable { onProductoClick(p) }) {
-                        Row(
-                            Modifier.fillMaxWidth().padding(12.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(12.dp)
-                        ) {
-                            ImagenCatalogo(p, 76)
-                            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                Text(p.nombre, style = MaterialTheme.typography.titleMedium)
-                                Text("Código: ${p.id} · ${p.categoria}", style = MaterialTheme.typography.bodySmall)
-                                Text("$${p.precio} CLP", color = MaterialTheme.colorScheme.primary)
+                    val estaExpandido = expandidoId == p.id
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .animateItem()
+                            .animateContentSize()
+                            .clickable { onProductoClick(p) }
+                    ) {
+                        Column(Modifier.fillMaxWidth().padding(12.dp)) {
+                            Row(
+                                Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                ImagenCatalogo(p, 76)
+                                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    Text(p.nombre, style = MaterialTheme.typography.titleMedium)
+                                    Text("Código: ${p.id} · ${p.categoria}", style = MaterialTheme.typography.bodySmall)
+                                    Text("$${p.precio} CLP", color = MaterialTheme.colorScheme.primary)
+                                    Text(
+                                        when {
+                                            p.stock == 0 -> "Agotado"
+                                            p.stock <= 15 -> "Pocas unidades (${p.stock})"
+                                            else -> "Disponible en tienda"
+                                        },
+                                        color = when {
+                                            p.stock == 0 -> MaterialTheme.colorScheme.error
+                                            p.stock <= 15 -> Color(0xFFD97706)
+                                            else -> Color(0xFF16A34A)
+                                        },
+                                        style = MaterialTheme.typography.labelMedium
+                                    )
+                                }
+                                IconButton(onClick = {
+                                    expandidoId = if (estaExpandido) null else p.id
+                                }) {
+                                    Icon(
+                                        imageVector = if (estaExpandido) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                                        contentDescription = "Vista rápida"
+                                    )
+                                }
+                            }
+                            if (estaExpandido) {
+                                HorizontalDivider(Modifier.padding(vertical = 8.dp))
                                 Text(
-                                    when {
-                                        p.stock == 0 -> "Agotado"
-                                        p.stock <= 15 -> "Pocas unidades (${p.stock})"
-                                        else -> "Disponible en tienda"
-                                    },
-                                    color = when {
-                                        p.stock == 0 -> MaterialTheme.colorScheme.error
-                                        p.stock <= 15 -> Color(0xFFD97706)
-                                        else -> Color(0xFF16A34A)
-                                    },
-                                    style = MaterialTheme.typography.labelMedium
+                                    text = descripcion(p),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
                         }
@@ -144,7 +192,11 @@ private fun CatalogoDetalle(producto: Producto, onVolverClick: () -> Unit) {
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             ImagenCatalogo(producto, 220)
-            Card(Modifier.fillMaxWidth()) {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .animateContentSize()
+            ) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text(producto.nombre, style = MaterialTheme.typography.headlineSmall)
                     Text("$${producto.precio} CLP", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.primary)

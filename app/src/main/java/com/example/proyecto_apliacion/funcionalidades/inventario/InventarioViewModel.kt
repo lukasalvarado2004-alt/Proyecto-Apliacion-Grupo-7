@@ -4,9 +4,10 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
-import com.example.proyecto_apliacion.data.Producto
-import com.example.proyecto_apliacion.data.ProductoRepository
+import com.example.proyecto_apliacion.data.local.Producto
+import com.example.proyecto_apliacion.data.repository.ProductoRepository
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -35,16 +36,13 @@ class InventarioViewModel(private val repository: ProductoRepository) : ViewMode
     private val mensaje = MutableStateFlow<String?>(null)
     private val cargando = MutableStateFlow(false)
 
-    // Estado para controlar qué producto se está editando actualmente (null = ninguno)
     var productoAEditar by mutableStateOf<Producto?>(null)
         private set
 
-    // Selecciona el producto a editar (o null para cerrar el diálogo)
     fun seleccionarProductoParaEditar(producto: Producto?) {
         productoAEditar = producto
     }
 
-    // Combinamos todos los flujos de estado incluyendo 'cargando'
     val uiState = combine(
         repository.observarProductos(),
         busqueda,
@@ -64,11 +62,11 @@ class InventarioViewModel(private val repository: ProductoRepository) : ViewMode
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), InventarioUiState())
 
     init { viewModelScope.launch { repository.inicializarSiVacio() } }
+
     fun cambiarBusqueda(value: String) { busqueda.value = value }
     fun cambiarCategoria(value: String) { categoria.value = value }
     fun limpiarMensaje() { mensaje.value = null; error.value = null }
 
-    // CREACIÓN
     fun guardar(id: String, nombre: String, categoria: String, stockTexto: String, precioTexto: String, imagenUri: String? = null) {
         val cleanId = id.trim().uppercase()
         val cleanNombre = nombre.trim()
@@ -87,7 +85,7 @@ class InventarioViewModel(private val repository: ProductoRepository) : ViewMode
 
         viewModelScope.launch {
             cargando.value = true
-            delay(600) // Pequeña pausa para visualizar la animación
+            delay(600)
             repository.guardar(Producto(cleanId, cleanNombre, categoria, stock!!, precio!!, imagenUri))
             error.value = null
             cargando.value = false
@@ -95,14 +93,13 @@ class InventarioViewModel(private val repository: ProductoRepository) : ViewMode
         }
     }
 
-    // MODIFICACIÓN
     fun actualizar(id: String, nombre: String, categoria: String, stock: String, precio: String, imagenUri: String?) {
         val stockInt = stock.toIntOrNull() ?: 0
         val precioConvertido = precio.toIntOrNull() ?: 0
 
         viewModelScope.launch {
             cargando.value = true
-            delay(600) // Pequeña pausa para visualizar la animación
+            delay(600)
             val productoEditado = Producto(
                 id = id,
                 nombre = nombre,
@@ -117,14 +114,25 @@ class InventarioViewModel(private val repository: ProductoRepository) : ViewMode
         }
     }
 
-    // ELIMINACIÓN
     fun eliminar(id: String) {
         viewModelScope.launch {
             cargando.value = true
-            delay(600) // Pequeña pausa para visualizar la animación
+            delay(600)
             repository.eliminar(id)
             cargando.value = false
             mensaje.value = "Eliminación exitosa"
         }
+    }
+}
+
+class InventarioViewModelFactory(
+    private val repository: ProductoRepository
+) : ViewModelProvider.Factory {
+    override fun <T : ViewModel> create(modelClass: Class<T>): T {
+        if (modelClass.isAssignableFrom(InventarioViewModel::class.java)) {
+            @Suppress("UNCHECKED_CAST")
+            return InventarioViewModel(repository) as T
+        }
+        throw IllegalArgumentException("Unknown ViewModel class")
     }
 }

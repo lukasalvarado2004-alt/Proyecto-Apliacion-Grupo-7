@@ -60,6 +60,14 @@ class LoginViewModel : ViewModel() {
         }
         if (claveOperador != null) {
             if (claveLimpia == claveOperador) {
+                val rolDemo = when (usuarioLimpio) {
+                    "admin" -> "ADMINISTRADOR"
+                    "ventas" -> "VENDEDOR"
+                    "inventario" -> "INVENTARIO"
+                    else -> "CLIENTE"
+                }
+                DefaultAppContainer(context).sessionManager.guardarRol(rolDemo)
+
                 esIngresoCliente = false
                 loginExitoso = true
                 mensajeError = null

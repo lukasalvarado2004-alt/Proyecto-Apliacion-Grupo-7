@@ -1,6 +1,7 @@
 package com.example.proyecto_apliacion.funcionalidades.panel_inicio
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -13,11 +14,17 @@ import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.proyecto_apliacion.data.DefaultAppContainer
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -26,6 +33,13 @@ fun PanelInicioScreen(
     onCambiarPantalla: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val context = LocalContext.current
+    val container = remember { DefaultAppContainer(context) }
+    val viewModel: PanelInicioViewModel = viewModel(
+        factory = PanelInicioViewModelFactory(container.productoRepository)
+    )
+    val resumen by viewModel.resumenState.collectAsState()
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -39,7 +53,6 @@ fun PanelInicioScreen(
             )
         },
         bottomBar = {
-            // Pasamos el control de cambio al menú de abajo
             MenuInferior(
                 pantallaActiva = pantallaSeleccionada,
                 onCambiar = onCambiarPantalla
@@ -70,9 +83,12 @@ fun PanelInicioScreen(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(16.dp)
                     ) {
-                        // Tarjeta de Stock Total
+                        // Tarjeta de Stock Total dinámico
                         Card(
-                            modifier = Modifier.weight(1f).height(140.dp),
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(140.dp)
+                                .clickable { onCambiarPantalla("inventario") },
                             colors = CardDefaults.cardColors(containerColor = Color.White)
                         ) {
                             Column(modifier = Modifier.padding(12.dp)) {
@@ -82,14 +98,17 @@ fun PanelInicioScreen(
                                     Text("Stock total", style = MaterialTheme.typography.bodyMedium, color = Color.Gray)
                                 }
                                 Spacer(modifier = Modifier.height(12.dp))
-                                Text("1,248", style = MaterialTheme.typography.headlineLarge, color = Color(0xFF0D1B2A))
+                                Text("${resumen.stockTotal}", style = MaterialTheme.typography.headlineLarge, color = Color(0xFF0D1B2A))
                                 Text("unidades", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
                             }
                         }
 
-                        // Tarjeta de Alertas
+                        // Tarjeta de Alertas dinámica
                         Card(
-                            modifier = Modifier.weight(1f).height(140.dp),
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(140.dp)
+                                .clickable { onCambiarPantalla("inventario") },
                             colors = CardDefaults.cardColors(containerColor = Color.White)
                         ) {
                             Column(modifier = Modifier.padding(12.dp)) {
@@ -99,7 +118,7 @@ fun PanelInicioScreen(
                                     Text("Productos bajo", style = MaterialTheme.typography.bodyMedium, color = Color.Gray)
                                 }
                                 Spacer(modifier = Modifier.height(12.dp))
-                                Text("12", style = MaterialTheme.typography.headlineLarge, color = Color(0xFFD90429))
+                                Text("${resumen.productosBajoStock}", style = MaterialTheme.typography.headlineLarge, color = Color(0xFFD90429))
                                 Text("productos", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
                             }
                         }
@@ -110,20 +129,26 @@ fun PanelInicioScreen(
                         horizontalArrangement = Arrangement.spacedBy(16.dp)
                     ) {
                         Card(
-                            modifier = Modifier.weight(1f).height(100.dp),
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(100.dp)
+                                .clickable { onCambiarPantalla("ventas") },
                             colors = CardDefaults.cardColors(containerColor = Color.White)
                         ) {
                             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                                Icon(Icons.Filled.ShowChart, contentDescription = null, tint = Color(0xFF4A90E2), modifier = Modifier.size(32.dp))
+                                Icon(Icons.Filled.ShowChart, contentDescription = "Ventas", tint = Color(0xFF4A90E2), modifier = Modifier.size(32.dp))
                             }
                         }
 
                         Card(
-                            modifier = Modifier.weight(1f).height(100.dp),
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(100.dp)
+                                .clickable { onCambiarPantalla("movimientos") },
                             colors = CardDefaults.cardColors(containerColor = Color.White)
                         ) {
                             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                                Icon(Icons.Filled.SwapHoriz, contentDescription = null, tint = Color(0xFF4A90E2), modifier = Modifier.size(32.dp))
+                                Icon(Icons.Filled.SwapHoriz, contentDescription = "Movimientos", tint = Color(0xFF4A90E2), modifier = Modifier.size(32.dp))
                             }
                         }
                     }
@@ -154,7 +179,7 @@ fun MenuInferior(
         )
         NavigationBarItem(
             selected = pantallaActiva == "inventario",
-            onClick = { onCambiar("inventario") }, // Gatilla el salto al listado de productos
+            onClick = { onCambiar("inventario") },
             icon = { Icon(Icons.Filled.Inventory, contentDescription = null) },
             label = { Text("Inventario") },
             colors = NavigationBarItemDefaults.colors(
@@ -166,18 +191,30 @@ fun MenuInferior(
             )
         )
         NavigationBarItem(
-            selected = false,
-            onClick = { },
+            selected = pantallaActiva == "movimientos",
+            onClick = { onCambiar("movimientos") },
             icon = { Icon(Icons.Filled.SwapHoriz, contentDescription = null) },
             label = { Text("Movimientos") },
-            colors = NavigationBarItemDefaults.colors(unselectedIconColor = Color.White, unselectedTextColor = Color.White)
+            colors = NavigationBarItemDefaults.colors(
+                selectedIconColor = Color(0xFF52B788),
+                selectedTextColor = Color(0xFF52B788),
+                unselectedIconColor = Color.White,
+                unselectedTextColor = Color.White,
+                indicatorColor = Color(0xFF1B2A4A)
+            )
         )
         NavigationBarItem(
-            selected = false,
-            onClick = { },
+            selected = pantallaActiva == "perfil",
+            onClick = { onCambiar("perfil") },
             icon = { Icon(Icons.Filled.Person, contentDescription = null) },
             label = { Text("Perfil") },
-            colors = NavigationBarItemDefaults.colors(unselectedIconColor = Color.White, unselectedTextColor = Color.White)
+            colors = NavigationBarItemDefaults.colors(
+                selectedIconColor = Color(0xFF52B788),
+                selectedTextColor = Color(0xFF52B788),
+                unselectedIconColor = Color.White,
+                unselectedTextColor = Color.White,
+                indicatorColor = Color(0xFF1B2A4A)
+            )
         )
     }
 }
