@@ -1,13 +1,10 @@
 package com.example.proyecto_apliacion.data.dto
 
-data class MindicadorResponse(
-    val dolar: IndicadorDetalle? = null,
-    val uf: IndicadorDetalle? = null
-)
+import com.google.gson.annotations.SerializedName
 
-data class IndicadorDetalle(
-    val codigo: String = "",
-    val nombre: String = "",
-    val valor: Double = 0.0,
-    val fecha: String = ""
+data class ExchangeRateResponse(
+    val result: String = "",
+    @SerializedName("time_last_update_utc")
+    val ultimaActualizacion: String = "",
+    val rates: Map<String, Double> = emptyMap()
 )
