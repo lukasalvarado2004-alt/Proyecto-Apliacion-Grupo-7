@@ -6,7 +6,6 @@ import com.example.proyecto_apliacion.data.remote.ApiService
 import com.example.proyecto_apliacion.data.remote.AuthAuthenticator
 import com.example.proyecto_apliacion.data.remote.AuthInterceptor
 import com.example.proyecto_apliacion.data.remote.IndicadoresApiService
-import com.example.proyecto_apliacion.data.remote.RetrofitInstance
 import com.example.proyecto_apliacion.data.remote.SessionManager
 import com.example.proyecto_apliacion.data.remote.UsuarioApiService
 import com.example.proyecto_apliacion.data.repository.*
@@ -80,7 +79,10 @@ class DefaultAppContainer(private val context: Context) : AppContainer {
     }
 
     override val productoRepository: ProductoRepository by lazy {
-        ProductoRepository(database.productoDao(), database.movimientoDao())
+        ProductoRepository(
+            productodao = database.productoDao(),
+            movimientosDao = database.movimientoDao()
+        )
     }
 
     override val comercialRepository: ComercialRepository by lazy {

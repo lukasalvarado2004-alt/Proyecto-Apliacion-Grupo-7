@@ -24,6 +24,12 @@ interface ProductoDao {
     @Query("SELECT COUNT(*) FROM productos")
     suspend fun contar(): Int
 
+    @Query("""
+        UPDATE productos SET stock = stock - :cantidad
+        WHERE id = :id AND :cantidad > 0 AND stock >= :cantidad
+    """)
+    suspend fun descontarStock(id: String, cantidad: Int): Int
+
     @Update
     suspend fun updateProducto(producto: Producto)
 }

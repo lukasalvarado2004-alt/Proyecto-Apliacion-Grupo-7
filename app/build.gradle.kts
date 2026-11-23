@@ -34,15 +34,31 @@ android {
     buildFeatures {
         compose = true
     }
+    testOptions {
+        unitTests.isReturnDefaultValues = true
+    }
 }
 
 dependencies {
+    testImplementation("io.kotest:kotest-runner-junit5:5.8.0")
+    testImplementation("io.kotest:kotest-assertions-core:5.8.0")
+    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.8.1")
+
+    // JUnit 5
+    testImplementation("org.junit.jupiter:junit-jupiter:5.10.0")
+
+    // MockK
+    testImplementation("io.mockk:mockk:1.13.10")
+
+    // Compose UI Test
+    androidTestImplementation("androidx.compose.ui:ui-test-junit4:1.6.2")
+    debugImplementation("androidx.compose.ui:ui-test-manifest:1.6.2")
 
     implementation("androidx.security:security-crypto:1.1.0-alpha06")
     // AndroidX & Compose Core
     // Retrofit
     implementation("com.squareup.retrofit2:retrofit:2.9.0")
-// Gson Converter (Para transformar el JSON a tus DTOs)
+    // Gson Converter (Para transformar el JSON a tus DTOs)
     implementation("com.squareup.retrofit2:converter-gson:2.9.0")
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.activity.compose)
@@ -73,4 +89,9 @@ dependencies {
     androidTestImplementation(libs.androidx.junit)
     debugImplementation(libs.androidx.compose.ui.test.manifest)
     debugImplementation(libs.androidx.compose.ui.tooling)
+    testRuntimeOnly("org.junit.vintage:junit-vintage-engine:5.10.2")
+}
+
+tasks.withType<Test>().configureEach {
+    useJUnitPlatform()
 }

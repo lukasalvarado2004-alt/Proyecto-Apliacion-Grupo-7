@@ -33,7 +33,14 @@ class MovimientosViewModel(repository: ProductoRepository) : ViewModel() {
 fun MovimientosScreen() {
     val context = LocalContext.current
     val vm: MovimientosViewModel = viewModel(factory = viewModelFactory {
-        initializer { MovimientosViewModel(ProductoRepository(KaijuDatabase.obtener(context).productoDao(), KaijuDatabase.obtener(context).movimientoDao())) }
+        initializer {
+            MovimientosViewModel(
+                repository = ProductoRepository(
+                    productodao = KaijuDatabase.obtener(context).productoDao(),
+                    movimientosDao = KaijuDatabase.obtener(context).movimientoDao()
+                )
+            )
+        }
     })
     val movimientos by vm.movimientos.collectAsState()
     Scaffold(topBar = { TopAppBar(title = { Text("Movimientos de inventario") }) }) { padding ->

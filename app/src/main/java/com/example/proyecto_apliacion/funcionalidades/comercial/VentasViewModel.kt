@@ -14,6 +14,8 @@ import com.example.proyecto_apliacion.data.repository.ProductoRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.CancellationException
+import com.example.proyecto_apliacion.data.local.Movimiento
 import kotlinx.coroutines.launch
 import java.text.NumberFormat
 import java.util.Locale
@@ -45,41 +47,53 @@ class VentasViewModel(
         cantidadStr: String,
         onExito: () -> Unit
     ) {
+        val cantidad = cantidadStr.toIntOrNull()
+        if (producto == null || cantidad == null || cantidad <= 0) {
+            _aviso.value = "Selecciona un producto y una cantidad válida"
+            return
+        }
+        val productoId = producto.id
         viewModelScope.launch {
-            val qty = cantidadStr.toIntOrNull() ?: 0
-            if (producto == null || qty <= 0) {
-                _aviso.value = "Selecciona producto y cantidad válida"
-            } else if (qty > producto.stock) {
-                _aviso.value = "Stock insuficiente: disponible ${producto.stock}"
-            } else {
-                try {
-                    val db = KaijuDatabase.obtener(context)
-                    db.withTransaction {
-                        val venta = Venta(
-                            usuario = usuarioActual,
-                            total = producto.precio.toLong() * qty
-                        )
-                        val ventaId = comercialRepository.registrarVenta(venta)
-
-                        val detalle = DetalleVenta(
-                            ventaId = ventaId,
-                            productoId = producto.id,
-                            nombreProducto = producto.nombre,
-                            cantidad = qty,
-                            precioUnitario = producto.precio,
-                            subtotal = producto.precio.toLong() * qty
-                        )
-                        comercialRepository.registrarDetallesVenta(listOf(detalle))
-
-                        val productoActualizado = producto.copy(stock = producto.stock - qty)
-                        productoRepository.actualizarProducto(productoActualizado)
+            try {
+                val db = KaijuDatabase.obtener(context)
+                db.withTransaction {
+                    val dao = db.productoDao()
+                    val actual = dao.buscarPorId(productoId)
+                        ?: error("El producto ya no existe")
+                    if (dao.descontarStock(productoId, cantidad) != 1) {
+                        error("Stock insuficiente. Disponible: ${actual.stock}")
                     }
-                    _aviso.value = "Venta registrada correctamente"
-                    onExito()
-                } catch (e: Exception) {
-                    _aviso.value = "Error al registrar la venta: ${e.message}"
+                    val total = actual.precio.toLong() * cantidad
+                    val ventaId = comercialRepository.registrarVenta(
+                        Venta(usuario = usuarioActual, total = total)
+                    )
+                    val detalle = DetalleVenta(
+                        ventaId = ventaId,
+                        productoId = actual.id,
+                        nombreProducto = actual.nombre,
+                        cantidad = cantidad,
+                        precioUnitario = actual.precio,
+                        subtotal = total
+                    )
+                    comercialRepository.registrarDetallesVenta(listOf(detalle))
+                    db.movimientoDao().insertar(
+                        Movimiento(
+                            productoId = actual.id,
+                            nombreProducto = actual.nombre,
+                            tipo = "SALIDA",
+                            cantidad = cantidad,
+                            detalle = "Venta #${ventaId}"
+                        )
+                    )
                 }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _aviso.value = "Error al registrar la venta: ${e.message}"
+                return@launch
             }
+            _aviso.value = "Venta registrada correctamente"
+            onExito()
         }
     }
 
